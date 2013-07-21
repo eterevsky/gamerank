@@ -1,16 +1,53 @@
+import datetime
 import re
 
 class PGNSyntaxError(Exception):
     pass
 
+_DATE = re.compile(r'(\d\d\d\d|\?+)\.(\d\d|\?+)\.(\d\d|\?+)')
 
 class Game(object):
 
     def __init__(self, tags, moves):
-        self.player1 = None
-        self.player2 = None
         self.tags = tags
         self.moves = moves
+
+        self._parse_date()
+
+        self.player1_name = self.tags['White']
+        self.player2_name = self.tags['Black']
+
+        if self.tags['Result'] == '1-0':
+            self.result = 1
+        elif self.tags['Result'] == '0-1':
+            self.result = 0
+        else:
+            self.result = 2
+
+    def _parse_date(self):
+        date_match = _DATE.match(self.tags['Date'])
+        try:
+            self.year = int(date_match.group(1))
+        except ValueError:
+            self.year = None
+
+        try:
+            self.month = int(date_match.group(2))
+        except ValueError:
+            self.month = None
+
+        try:
+            self.day = int(date_match.group(3))
+        except ValueError:
+            self.day = None
+
+        if (self.year is not None and
+            self.month is not None and
+            self.day is not None):
+            self.date = datetime.datetime(
+                self.year, self.month, self.day).timestamp()
+        else:
+            self.date = None
 
 
 _TAG_LINE = re.compile(r'\s*\[(\w+)\s+"(.*)"\]\s*')
