@@ -10,7 +10,7 @@ YEAR = 365 * 24 * 3600
 
 def _dates_compatible(date1, date1_precision, date2, date2_precision):
     d1 = datetime.date.fromtimestamp(date1)
-    d2 = datetime.date.fromtimestamp(date1)
+    d2 = datetime.date.fromtimestamp(date2)
 
     precision = max(date1_precision, date2_precision)
 
