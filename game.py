@@ -5,49 +5,100 @@ class PGNSyntaxError(Exception):
     pass
 
 _DATE = re.compile(r'(\d\d\d\d|\?+)\.(\d\d|\?+)\.(\d\d|\?+)')
+_RESULT_STR = ('0-1', '1-0', '1/2-1/2')
+
+
+def _parse_date(date_str):
+    date_match = _DATE.match(date_str)
+    precision = 0
+
+    try:
+        day = int(date_match.group(3))
+    except ValueError:
+        day = 1
+        precision = 1
+
+    try:
+        month = int(date_match.group(2))
+    except ValueError:
+        month = 1
+        precision = 2
+
+    try:
+        year = int(date_match.group(1))
+    except ValueError:
+        year = 2000
+        precision = 3
+
+    date = datetime.datetime(year, month, day).timestamp()
+    return date, precision
+
 
 class Game(object):
 
-    def __init__(self, tags, moves):
-        self.tags = tags
+    def __init__(self, result, player1_name, player2_name,
+                 player1_id=None, player2_id=None, date=None,
+                 date_precision=0, moves=None, gameid=None,
+                 tags=None):
+        self.result = result
+        self.player1_name = player1_name
+        self.player2_name = player2_name
+        self.player1_id = player1_id
+        self.player2_id = player2_id
+        self.date = date
+        self.date_precision = date_precision
         self.moves = moves
-
-        self._parse_date()
-
-        self.player1_name = self.tags['White']
-        self.player2_name = self.tags['Black']
-
-        if self.tags['Result'] == '1-0':
-            self.result = 1
-        elif self.tags['Result'] == '0-1':
-            self.result = 0
+        self.gameid = gameid
+        if tags:
+            self.tags = tags
         else:
-            self.result = 2
+            self.tags = {}
 
-    def _parse_date(self):
-        date_match = _DATE.match(self.tags['Date'])
-        try:
-            self.year = int(date_match.group(1))
-        except ValueError:
-            self.year = None
+    @staticmethod
+    def fromtags(tags, moves):
+        date, precision = _parse_date(tags['Date'])
 
-        try:
-            self.month = int(date_match.group(2))
-        except ValueError:
-            self.month = None
+        player1_name = tags['White']
+        player2_name = tags['Black']
 
-        try:
-            self.day = int(date_match.group(3))
-        except ValueError:
-            self.day = None
-
-        if (self.year is not None and
-            self.month is not None and
-            self.day is not None):
-            self.date = datetime.datetime(
-                self.year, self.month, self.day).timestamp()
+        if tags['Result'] == '1-0':
+            result = 1
+        elif tags['Result'] == '0-1':
+            result = 0
         else:
-            self.date = None
+            result = 2
+
+        return Game(result=result,
+                    player1_name=player1_name,
+                    player2_name=player2_name,
+                    date=date,
+                    date_precision=precision,
+                    moves=moves,
+                    tags=tags)
+
+    def __str__(self):
+        date = datetime.date.fromtimestamp(self.date)
+        if self.date_precision == 0:
+            date_str = date.isoformat()
+        elif self.date_precision == 1:
+            date_str = '{:04}-{:02}-??'.format(date.year, date.month)
+        elif self.date_precision == 2:
+            date_str = '{:04}-??-??'.format(date.year)
+        else:
+            date_str = '????-??-??'
+        return '{} {}-{} {} ({} moves)'.format(
+            _RESULT_STR(self.result),
+            self.player1_name,
+            self.player2_name,
+            date_str,
+            len(self.moves) / 2)
+
+    def moves_str(self):
+        return ' '.join(self.moves)
+
+    def add_tag(name, value):
+        self.tags[name] = value
+
 
 
 _TAG_LINE = re.compile(r'\s*\[(\w+)\s+"(.*)"\]\s*')
@@ -67,7 +118,7 @@ class PGNParser(object):
         while not self._eof():
             tags = self._parse_tags()
             moves = self._parse_moves()
-            games.append(Game(tags, moves))
+            games.append(Game.fromtags(tags, moves))
         return games
 
     def _read_line_wo_comments(self):
