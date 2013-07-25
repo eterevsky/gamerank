@@ -1,3 +1,4 @@
+import datetime
 import math
 import os.path
 import sqlite3
@@ -79,7 +80,7 @@ class DataBase(object):
                 row[4] == game.player1_name and
                 row[5] == game.player2_name):
                 return row[0]
-            elif len(game.moves) >= 20:
+            elif len(game.moves) >= 19:
                 raise Exception('Two games with the same moves, but ' +
                                 'different metadata:\n' +
                                 'DB: ' + str(self.load_game(row[0])) +
