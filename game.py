@@ -4,7 +4,7 @@ import re
 class PGNSyntaxError(Exception):
     pass
 
-_DATE = re.compile(r'(\d\d\d\d|\?+)\.(\d\d|\?+)\.(\d\d|\?+)')
+_DATE = re.compile(r'(\d\d\d\d|\?+)[\-\.](\d\d|\?+)[\-\.](\d\d|\?+)')
 _RESULT_STR = ('0-1', '1-0', '1/2-1/2')
 
 
@@ -30,7 +30,7 @@ def _parse_date(date_str):
         year = 2000
         precision = 3
 
-    date = datetime.datetime(year, month, day).timestamp()
+    date = int(datetime.datetime(year, month, day).timestamp())
     return date, precision
 
 
@@ -45,8 +45,11 @@ class Game(object):
         self.player2_name = player2_name
         self.player1_id = player1_id
         self.player2_id = player2_id
-        self.date = date
-        self.date_precision = date_precision
+        if type(date) is str:
+            self.date, self.date_precision = _parse_date(date)
+        else:
+            self.date = date
+            self.date_precision = date_precision
         self.moves = moves
         self.gameid = gameid
         if tags:
@@ -77,26 +80,31 @@ class Game(object):
                     tags=tags)
 
     def __str__(self):
-        date = datetime.date.fromtimestamp(self.date)
-        if self.date_precision == 0:
-            date_str = date.isoformat()
-        elif self.date_precision == 1:
-            date_str = '{:04}-{:02}-??'.format(date.year, date.month)
-        elif self.date_precision == 2:
-            date_str = '{:04}-??-??'.format(date.year)
-        else:
-            date_str = '????-??-??'
         return '{} {}-{} {} ({} moves)'.format(
             _RESULT_STR(self.result),
             self.player1_name,
             self.player2_name,
-            date_str,
+            self.date_str(),
             len(self.moves) / 2)
+
+    def date_str(self):
+        date = datetime.date.fromtimestamp(self.date)
+
+        if self.date_precision == 0:
+            return date.isoformat()
+
+        if self.date_precision == 1:
+            return '{:04}-{:02}-??'.format(date.year, date.month)
+
+        if self.date_precision == 2:
+            return '{:04}-??-??'.format(date.year)
+
+        return '????-??-??'
 
     def moves_str(self):
         return ' '.join(self.moves)
 
-    def add_tag(name, value):
+    def add_tag(self, name, value):
         self.tags[name] = value
 
 

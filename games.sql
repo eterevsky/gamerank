@@ -1,23 +1,26 @@
 CREATE TABLE game (
   gameid INTEGER PRIMARY KEY AUTOINCREMENT,
-  white INTEGER,
-  black INTEGER,
+  playerid1 INTEGER,
+  playerid2 INTEGER,
   result INTEGER,
   date INTEGER,
+  dateprecision INTEGER,
+  nmoves INTEGER,
   moves TEXT,
-  FOREIGN KEY (white) REFERENCES player(playerid),
-  FOREIGN KEY (black) REFERENCES player(playerid)
+  FOREIGN KEY (playerid1) REFERENCES player(playerid),
+  FOREIGN KEY (playerid2) REFERENCES player(playerid)
 );
 
 CREATE TABLE player (
   playerid INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT,
   firstnames TEXT,
   lastname TEXT
 );
 
 CREATE TABLE tag (
-  game INTEGER,
+  gameid INTEGER,
   name TEXT,
   value TEXT,
-  FOREIGN KEY (game) REFERENCES game(gameid)
+  FOREIGN KEY (gameid) REFERENCES game(gameid)
 );

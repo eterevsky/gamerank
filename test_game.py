@@ -215,6 +215,48 @@ taucht wieder auf und zwingt den schwarzen König ins  Freie.} Ke5 (65... f2 66.
 Kd6 f1=Q 67. e5#) 66. Re8+ Kf4 67. Kd5 f6 (67... Kxg4  68. Rf8 $18) 68. Rf8 1-0
 """
 
+TEST_PGN4 = """
+[Event "F/S Return Match"]
+[Site "Belgrade, Serbia JUG"]
+[Date "1990.11.04"]
+[Round "29"]
+[White "Aaa, Bbb"]
+[Black "Ccc, Ddd"]
+[Result "1-0"]
+
+1. e4 e5 1-0
+
+[Event "F/S Return Match"]
+[Site "Belgrade, Serbia JUG"]
+[Date "1991.12.??"]
+[Round "29"]
+[White "Eee, Bbb"]
+[Black "Fff, Ddd"]
+[Result "0-1"]
+
+1. d4 d5 0-1
+
+[Event "F/S Return Match"]
+[Site "Belgrade, Serbia JUG"]
+[Date "1992.??.??"]
+[Round "29"]
+[White "Aaa, Bbb"]
+[Black "Ccc, Ddd"]
+[Result "1-0"]
+
+1. e4 e5 1-0
+
+[Event "F/S Return Match"]
+[Site "Belgrade, Serbia JUG"]
+[Date "????.??.??"]
+[Round "29"]
+[White "Eee, Bbb"]
+[Black "Fff, Ddd"]
+[Result "0-1"]
+
+1. d4 d5 0-1
+"""
+
 class TestPGNParser(unittest.TestCase):
 
     def test_parse1(self):
@@ -228,6 +270,7 @@ class TestPGNParser(unittest.TestCase):
 
         date = datetime.date.fromtimestamp(game.date)
         self.assertEqual(date.isoformat(), '1992-11-04')
+        self.assertEqual(game.date_str(), '1992-11-04')
 
         self.assertEqual(game.player1_name, 'Fischer, Robert J.')
         self.assertEqual(game.player2_name, 'Spassky, Boris V.')
@@ -253,8 +296,10 @@ class TestPGNParser(unittest.TestCase):
 
         date0 = datetime.date.fromtimestamp(games[0].date)
         self.assertEqual(date0.isoformat(), '1990-11-04')
+        self.assertEqual(games[0].date_str(), '1990-11-04')
         date1 = datetime.date.fromtimestamp(games[1].date)
         self.assertEqual(date1.isoformat(), '1990-12-05')
+        self.assertEqual(games[1].date_str(), '1990-12-05')
 
         self.assertEqual(games[0].player1_name, 'Aaa, Bbb')
         self.assertEqual(games[0].player2_name, 'Ccc, Ddd')
@@ -277,6 +322,7 @@ class TestPGNParser(unittest.TestCase):
 
         date = datetime.date.fromtimestamp(game.date)
         self.assertEqual(date.isoformat(), '2007-03-31')
+        self.assertEqual(game.date_str(), '2007-03-31')
 
         self.assertEqual(game.player1_name, 'Carlsen, Magnus')
         self.assertEqual(game.player2_name, 'Hracek, Zbynek')
@@ -286,6 +332,28 @@ class TestPGNParser(unittest.TestCase):
         self.assertEqual(game.moves[0], 'd4')
         self.assertEqual(game.moves[20], 'Nxe4')
         self.assertEqual(game.moves[134], 'Rf8')
+
+    def test_parse_dates(self):
+        pgn_file = io.StringIO(TEST_PGN4)
+        parser = PGNParser(pgn_file)
+        games = parser.parse()
+
+        self.assertEqual(len(games), 4)
+
+        self.assertEqual(games[0].date_str(), '1990-11-04')
+        date = datetime.date.fromtimestamp(games[0].date)
+        self.assertEqual(date.isoformat(), '1990-11-04')
+        self.assertEqual(games[0].date_precision, 0)
+
+        self.assertEqual(games[1].date_str(), '1991-12-??')
+        self.assertEqual(games[1].date_precision, 1)
+
+        self.assertEqual(games[2].date_str(), '1992-??-??')
+        self.assertEqual(games[2].date_precision, 2)
+
+        self.assertEqual(games[3].date_str(), '????-??-??')
+        self.assertEqual(games[3].date_precision, 3)
+
 
 
 if __name__ == '__main__':
