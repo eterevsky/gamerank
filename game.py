@@ -122,12 +122,13 @@ class PGNParser(object):
         self._in_comment = False
 
     def parse(self):
-        games = []
         while not self._eof():
             tags = self._parse_tags()
             moves = self._parse_moves()
-            games.append(Game.fromtags(tags, moves))
-        return games
+            yield Game.fromtags(tags, moves)
+
+    def parse_all(self):
+        return list(self.parse())
 
     def _read_line_wo_comments(self):
         line = self._file.readline()

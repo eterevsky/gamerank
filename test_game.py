@@ -262,7 +262,7 @@ class TestPGNParser(unittest.TestCase):
     def test_parse1(self):
         pgn_file = io.StringIO(TEST_PGN1)
         parser = PGNParser(pgn_file)
-        games = parser.parse()
+        games = parser.parse_all()
 
         self.assertEqual(len(games), 1)
         game = games[0]
@@ -290,7 +290,7 @@ class TestPGNParser(unittest.TestCase):
     def test_parse2(self):
         pgn_file = io.StringIO(TEST_PGN2)
         parser = PGNParser(pgn_file)
-        games = parser.parse()
+        games = parser.parse_all()
 
         self.assertEqual(len(games), 2)
 
@@ -315,7 +315,7 @@ class TestPGNParser(unittest.TestCase):
     def test_parse3(self):
         pgn_file = io.StringIO(TEST_PGN3)
         parser = PGNParser(pgn_file)
-        games = parser.parse()
+        games = parser.parse_all()
 
         self.assertEqual(len(games), 1)
         game = games[0]
@@ -336,7 +336,7 @@ class TestPGNParser(unittest.TestCase):
     def test_parse_dates(self):
         pgn_file = io.StringIO(TEST_PGN4)
         parser = PGNParser(pgn_file)
-        games = parser.parse()
+        games = parser.parse_all()
 
         self.assertEqual(len(games), 4)
 
