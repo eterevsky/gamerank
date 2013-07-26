@@ -3,7 +3,7 @@ import math
 import os.path
 import sqlite3
 
-from game import Game
+from game import Game, lastname_from_name
 
 YEAR = 365 * 24 * 3600
 
@@ -86,13 +86,13 @@ class DataBase(object):
             if (row[1] == game.result and
                 _dates_compatible(game.date, game.date_precision,
                                   row[2], row[3]) and
-                row[4] == game.player1_name and
-                row[5] == game.player2_name):
+                lastname_from_name(row[4]) == game.player1_lastname() and
+                lastname_from_name(row[5]) == game.player2_lastname()):
                 return row[0]
             elif len(game.moves) >= 19:
                 raise Exception('Two games with the same moves, but ' +
                                 'different metadata:\n' +
-                                'DB: ' + str(self.load_game(row[0])) +
+                                'DB: ' + str(self.load_game(row[0])) + '\n' +
                                 'New: ' + str(game))
 
     def get_player(self, name):
@@ -133,5 +133,7 @@ class DataBase(object):
             cursor.execute("""INSERT INTO tag(gameid, name, value)
                               VALUES (?, ?, ?)""",
                            (game.gameid, name, value))
+
+        self._conn.commit()
 
         return game.gameid

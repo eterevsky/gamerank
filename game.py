@@ -34,6 +34,14 @@ def _parse_date(date_str):
     return date, precision
 
 
+def lastname_from_name(name):
+    i = name.find(',')
+    if i >= 0:
+        return name[:i]
+    else:
+        return name
+
+
 class Game(object):
 
     def __init__(self, result, player1_name, player2_name,
@@ -80,12 +88,16 @@ class Game(object):
                     tags=tags)
 
     def __str__(self):
-        return '{} {}-{} {} ({} moves)'.format(
-            _RESULT_STR(self.result),
+        game_str = '{} {}-{} {} ({} moves)'.format(
+            _RESULT_STR[self.result],
             self.player1_name,
             self.player2_name,
             self.date_str(),
             len(self.moves) / 2)
+        if self.gameid:
+            return '#{}: '.format(self.gameid) + game_str
+        else:
+            return game_str
 
     def date_str(self):
         date = datetime.date.fromtimestamp(self.date)
@@ -106,6 +118,12 @@ class Game(object):
 
     def add_tag(self, name, value):
         self.tags[name] = value
+
+    def player1_lastname(self):
+        return lastname_from_name(self.player1_name)
+
+    def player2_lastname(self):
+        return lastname_from_name(self.player2_name)
 
 
 

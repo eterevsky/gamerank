@@ -2,7 +2,7 @@ import datetime
 import io
 import unittest
 
-from game import PGNParser
+from game import Game, PGNParser
 
 
 TEST_PGN1 = """
@@ -353,6 +353,30 @@ class TestPGNParser(unittest.TestCase):
 
         self.assertEqual(games[3].date_str(), '????-??-??')
         self.assertEqual(games[3].date_precision, 3)
+
+    def test_str(self):
+        game = Game(result=1,
+                    player1_name='Pupkin, Vasily',
+                    player2_name='Syutkin, Vladimir',
+                    date='2010-09-??',
+                    moves=['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4',
+                           'Nf6', 'O-O', 'Be7', 'Re1', 'b5', 'Bb3', 'd6',
+                           'c3', 'O-O', 'h3', 'Nb8', 'd4', 'Nbd7'],
+                    tags={'Round': '13', 'Event': 'Abc'})
+
+        s = str(game)
+        self.assertTrue(s.find('1-0') >= 0)
+        self.assertTrue(s.find('Pupkin') >= 0)
+        self.assertTrue(s.find('Syutkin') >= 0)
+        self.assertTrue(s.find('2010-09') >= 0)
+
+        game.gameid = 239
+        s = str(game)
+        self.assertTrue(s.find('239') >= 0)
+        self.assertTrue(s.find('1-0') >= 0)
+        self.assertTrue(s.find('Pupkin') >= 0)
+        self.assertTrue(s.find('Syutkin') >= 0)
+        self.assertTrue(s.find('2010-09') >= 0)
 
 
 

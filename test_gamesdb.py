@@ -137,6 +137,30 @@ class TestGamesDB(unittest.TestCase):
         with self.assertRaises(Exception):
             db.find_game(game6)
 
+    def test_find_game_nonexact(self):
+        db = DataBase(path=':memory:')
+
+        game1 = Game(result=1,
+                     player1_name='Pupkin, Vasily',
+                     player2_name='Syutkin, Vladimir',
+                     date='2010-09-??',
+                     moves=['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4',
+                            'Nf6', 'O-O', 'Be7', 'Re1', 'b5', 'Bb3', 'd6',
+                            'c3', 'O-O', 'h3', 'Nb8', 'd4', 'Nbd7'],
+                     tags={'Round': '13', 'Event': 'Abc'})
+        id1 = db.add_game(game1)
+
+        game2 = Game(result=1,
+                     player1_name='Pupkin, Vasily',
+                     player2_name='Syutkin, V',
+                     date='2010-09-??',
+                     moves=['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4',
+                            'Nf6', 'O-O', 'Be7', 'Re1', 'b5', 'Bb3', 'd6',
+                            'c3', 'O-O', 'h3', 'Nb8', 'd4', 'Nbd7'],
+                     tags={'Round': '13', 'Event': 'Abc'})
+        self.assertEqual(db.find_game(game2), id1)
+
+
     def test_dates_compatible(self):
         date1, precision1 = _parse_date('????-??-??')
         self.assertTrue(_dates_compatible(date1, precision1, date1, precision1))
