@@ -134,6 +134,7 @@ class DataBase(object):
                               VALUES (?, ?, ?)""",
                            (game.gameid, name, value))
 
-        self._conn.commit()
-
         return game.gameid
+
+    def commit(self):
+        self._conn.commit()

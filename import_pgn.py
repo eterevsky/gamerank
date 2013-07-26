@@ -12,4 +12,5 @@ parser = PGNParser(open(sys.argv[1], encoding='iso-8859-1'))
 for game in parser.parse():
     db.add_game(game)
     print(game)
+db.commit()
 

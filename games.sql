@@ -11,12 +11,16 @@ CREATE TABLE game (
   FOREIGN KEY (playerid2) REFERENCES player(playerid)
 );
 
+CREATE INDEX game_moves ON game (moves);
+
 CREATE TABLE player (
   playerid INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT,
   firstnames TEXT,
   lastname TEXT
 );
+
+CREATE INDEX player_name ON player (name);
 
 CREATE TABLE tag (
   gameid INTEGER,
