@@ -8,7 +8,6 @@ class TestGamesDB(unittest.TestCase):
 
     def test_player(self):
         db = DataBase(path=':memory:')
-        db.create_schema('games.sql')
 
         id1 = db.get_player('Pupkin, Vasily')
         self.assertEqual(db.get_player('Pupkin, Vasily'), id1)
@@ -19,7 +18,6 @@ class TestGamesDB(unittest.TestCase):
 
     def test_add_game(self):
         db = DataBase(path=':memory:')
-        db.create_schema('games.sql')
 
         game1 = Game(result=1,
                      player1_name='Pupkin, Vasily',
@@ -77,7 +75,6 @@ class TestGamesDB(unittest.TestCase):
 
     def test_find_game(self):
         db = DataBase(path=':memory:')
-        db.create_schema('games.sql')
 
         game1 = Game(result=1,
                      player1_name='Pupkin, Vasily',

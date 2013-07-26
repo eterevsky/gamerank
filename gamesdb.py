@@ -30,6 +30,15 @@ class DataBase(object):
 
     def __init__(self, path='games.db'):
         self._conn = sqlite3.connect(path)
+        if self._unintialized():
+            self.create_schema(path='games.sql')
+
+    def _unintialized(self):
+        try:
+            self._conn.execute('SELECT count(*) FROM game')
+        except sqlite3.OperationalError:
+            return True
+        return False
 
     def create_schema(self, path):
         with open(path) as schema_file:
