@@ -188,6 +188,43 @@ class TestGamesDB(unittest.TestCase):
         date8, precision8 = _parse_date('2005-10-04')
         self.assertFalse(_dates_compatible(date8, precision8, date7, precision7))
 
+    def test_load_players(self):
+        db = DataBase(path=':memory:')
+
+        game1 = Game(result=1,
+                     player1_name='Pupkin, Vasily',
+                     player2_name='Syutkin, Vladimir',
+                     date='2010-09-??',
+                     moves=['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4',
+                            'Nf6', 'O-O', 'Be7', 'Re1', 'b5', 'Bb3', 'd6',
+                            'c3', 'O-O', 'h3', 'Nb8', 'd4', 'Nbd7'],
+                     tags={'Round': '13', 'Event': 'Abc'})
+        db.add_game(game1)
+
+        game2 = Game(result=0,
+                     player1_name='Syutkin, Vladimir',
+                     player2_name='Assange, Julian',
+                     date='2005-06-??',
+                     moves=['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4',
+                            'Nf6', 'O-O', 'Be7', 'Re1', 'b5', 'Bb3', 'd6',
+                            'c3', 'O-O', 'h3', 'Nb8'],
+                     tags={'Round': '13', 'Event': 'Abc'})
+        db.add_game(game2)
+
+        game4 = Game(result=2,
+                     player1_name='Pupkin, Vasily',
+                     player2_name='Syutkin, Vladimir',
+                     date='????-??-??',
+                     moves=['e4', 'e5'])
+        db.add_game(game4)
+
+        players = db.load_players()
+        self.assertEqual(len(players), 3)
+        for i, name in players.items():
+             self.assertTrue(type(i) is int)
+             self.assertTrue(name in ('Pupkin, Vasily',
+                                      'Syutkin, Vladimir',
+                                      'Assange, Julian'))
 
 
 if __name__ == '__main__':

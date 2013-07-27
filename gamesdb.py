@@ -72,6 +72,14 @@ class DataBase(object):
 
         return game
 
+    def load_players(self):
+        cursor = self._conn.cursor()
+        cursor.execute('SELECT playerid, name FROM player')
+        players = {}
+        for row in cursor:
+            players[row[0]] = row[1]
+        return players
+
     def find_game(self, game):
         moves = game.moves_str()
         cursor = self._conn.cursor()
