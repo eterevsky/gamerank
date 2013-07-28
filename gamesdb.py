@@ -80,6 +80,15 @@ class DataBase(object):
             players[row[0]] = row[1]
         return players
 
+    def load_game_results(self):
+        cursor = self._conn.cursor()
+        cursor.execute("""SELECT playerid1, playerid2, date, result
+                          FROM game WHERE dateprecision=0""")
+        results = []
+        for row in cursor:
+            results.append(tuple(row))
+        return results
+
     def find_game(self, game):
         moves = game.moves_str()
         cursor = self._conn.cursor()
