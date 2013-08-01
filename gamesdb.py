@@ -82,7 +82,7 @@ class DataBase(object):
 
     def load_game_results(self):
         cursor = self._conn.cursor()
-        cursor.execute("""SELECT playerid1, playerid2, date, result
+        cursor.execute("""SELECT playerid1, playerid2, date / (24*3600), result
                           FROM game WHERE dateprecision=0""")
         results = []
         for row in cursor:
