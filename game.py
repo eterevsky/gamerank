@@ -1,3 +1,4 @@
+import calendar
 import datetime
 import re
 
@@ -30,7 +31,7 @@ def _parse_date(date_str):
         year = 2000
         precision = 3
 
-    date = int(datetime.datetime(year, month, day).timestamp())
+    date = int(calendar.timegm(datetime.datetime(year, month, day).timetuple()))
     return date, precision
 
 
