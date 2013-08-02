@@ -95,57 +95,65 @@ class WinningProbabilityFunction(object):
 
 
 class Optimizer(object):
-    def __init__(self, f_points_max=2000, f_points_step=2):
-        self.f_points_max_ = f_points_max
-        self.f_points_step_ = f_points_step
+    def __init__(self):
+        self.f = WinningProbabilityFunction()
 
-    def load_results(results):
+    def load_games(games):
+        """Load the list of game results.
+
+        Args:
+            games: list of tuples (player1, player2, date, result)
+            Result is 0 for black victory, 1 for white victory, 2 for draw.
+        """
         self.games_ = results
-        self.populate_players_and_dates_(results)
-
-    def populate_players_and_dates_(self, results):
         # player -> date -> games list
+        self.player_date_games = self.generate_player_date_games_()
+        self.rating_vars_index_ = self.generate_rating_vars_index_()
+        self.rating_delta_coefficients_ = self.generate_rating_deltas_()
+
+    def generate_player_date_games_(self):
         player_date_games = {}
         for player1, player2, date, _ in results:
             if player1 not in player_date_games:
                 player_date_games[player1] = {}
-            if date not in dates_by_players[player1]:
-                dates_by_players[player1][date] = 0
-            dates_by_players[player1][date] += 1
+            if date not in player_date_games[player1]:
+                player_date_games[player1][date] = 0
+            player_date_games[player1][date] += 1
 
-            if player2 not in dates_by_players:
-                dates_by_players[player2] = {}
-            if date not in dates_by_players[player2]:
-                dates_by_players[player2][date] = 0
-            dates_by_players[player2][date] += 1
+            if player2 not in player_date_games:
+                player_date_games[player2] = {}
+            if date not in player_date_games[player2]:
+                player_date_games[player2][date] = 0
+            player_date_games[player2][date] += 1
 
-        self.var_player_ = []
-        self.var_date_ = []
-        self.var_date_delta_ = []
-        self.var_ngames_ = []
-        # Number of games on the date i-1 and i.
-        self.var_ngames_delta_ = []
+        return player_date_games
 
-        self.player_date_to_idx = {}
+    def generate_rating_vars_index_(self):
+        v = []
+        for player in self.player_date_games_:
+            for date in self.player_date_games_:
+                v.append((player, date))
+        return v
 
-        for player in sorted(dates_by_players.keys()):
-            for date in sorted(dates_by_players[player].keys()):
-                ngames_on_date = dates_by_players[player][date]
-                if len(self.var_player_) > 0:
-                    if player == self.var_player_[-1]:
-                        self.var_date_delta_.append(date - self.var_date_[-1])
-                        self.var_ngames_delta_.append(ngames_on_date +
-                                                      self.var_ngames_[-1])
-                    else:
-                        self.var_date_delta_.append(None)
-                        self.var_ngames_delta_.append(None)
-                self.player_date_to_idx[(player, date)] = len(self.var_player_)
-                self.var_player_.append(player)
-                self.var_date_.append(date)
-                self.var_ngames_.append(ngames_on_date)
+    def generate_rating_deltas_(self):
+        """Generate a table of coefficients to rating changes.
 
-    def objective(self, v):
-        rating_vars = v[:len(self.var_ngames_)]
-        function_vars = v[len(self.var_ngames_):]
+        1 / (difference in days for subsequent ratings) +
+        1 / (the number of games between)
 
-        f = self.construct_function(function_vars)
+        TODO: Tune coefficients of each part.
+        """
+
+        delta_coef = []
+        last_player, last_date = self.rating_vars_index_[0]
+        last_games = len(self.player_date_games_[last_player][last_date])
+        for player, date in self.rating_vars_index_[1:]:
+            games = len(self.player_date_games_[player][date])
+            if player == last_player:
+                delta_coef.append(1 / (date - last_date) +
+                                  1 / (games + last_games))
+            else:
+                delta_coef.append(0)
+            last_player, last_date, last_games = player, date, games
+
+        return coef
