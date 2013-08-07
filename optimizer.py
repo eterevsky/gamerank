@@ -110,6 +110,19 @@ class Optimizer(object):
         self.player_date_games = self.generate_player_date_games_()
         self.rating_vars_index_ = self.generate_rating_vars_index_()
         self.rating_delta_coefficients_ = self.generate_rating_deltas_()
+        self.wins_rating_index_ = []
+        self.losses_rating_index_ = []
+        self.draws_rating_index_ = []
+        for player1, player2, date, result in self.games_:
+            indices = (self.rating_vars_index_[(player1, date)],
+                       self.rating_vars_index_[(player2, date)])
+            if result == 0:
+                self.losses_rating_index_.append(indices)
+            elif result == 1:
+                self.wins_rating_index_.append(indices)
+            else:
+                self.draws_rating_index_.append(indices)
+
 
     def generate_player_date_games_(self):
         player_date_games = {}
@@ -157,3 +170,9 @@ class Optimizer(object):
             last_player, last_date, last_games = player, date, games
 
         return coef
+
+    def objective(self, v):
+        self.f.reset_from_vars(v[len(self.games_):])
+
+        wins_rating_delta = v[i] - v[j] for i, j in self.wins_rating_index_
+        wins_propabilities = self.f.calc_vector(wins_rating_delta)
