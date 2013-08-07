@@ -1,4 +1,4 @@
-import math
+from math import exp, log
 
 class WinningProbabilityFunction(object):
     """Probablity of winning based on difference of ratings.
@@ -97,6 +97,9 @@ class WinningProbabilityFunction(object):
 class Optimizer(object):
     def __init__(self):
         self.f = WinningProbabilityFunction()
+        self.ref_coef = 1.0
+        self.func_reg_coef = 1.0
+        self.func_soft_reg_coef = 0.1
 
     def load_games(games):
         """Load the list of game results.
@@ -122,7 +125,6 @@ class Optimizer(object):
                 self.wins_rating_index_.append(indices)
             else:
                 self.draws_rating_index_.append(indices)
-
 
     def generate_player_date_games_(self):
         player_date_games = {}
@@ -171,8 +173,26 @@ class Optimizer(object):
 
         return coef
 
+    def regularization(self, v):
+        r = sum((v - 2000)**2
+
     def objective(self, v):
         self.f.reset_from_vars(v[len(self.games_):])
 
         wins_rating_delta = v[i] - v[j] for i, j in self.wins_rating_index_
         wins_propabilities = self.f.calc_vector(wins_rating_delta)
+        wins_likelihood = sum(log(p) for p in winds_probabilities)
+
+        losses_rating_delta = v[i] - v[j] for i, j in self.losses_rating_index_
+        losses_probablilities = self.f.calc_vector(losses_rating_delta)
+        losses_likelihood = sum(log(1 - p) for p in losses_probablilities)
+
+        draws_rating_delta = v[i] - v[j] for i, j in self.draws_rating_index_
+        draws_probabilities = self.f.calc_vector(draws_probabilities)
+        draws_likelihood = sum((log(p) + log(1 - p)
+                               for p in draws_probabilities) / 2
+
+        return (wins_likelihood + losses_likelihood + draws_likelihood -
+                self.regularization(v[:len(self.games_)]) -
+                self.reg_coef * self.f.regularization() -
+                self.func_soft_reg_coef * self.f.soft_regularization())
