@@ -1,4 +1,6 @@
 from math import exp, log
+from random import random
+from scipy.optimize import fmin_bfgs, fmin_ncg
 
 class WinningProbabilityFunction(object):
     """Probablity of winning based on difference of ratings.
@@ -48,7 +50,7 @@ class WinningProbabilityFunction(object):
         for i in range(len(var)):
             v += var[i] / self.s
             if v > 0:
-                self.values_log[i + 1] = math.log(v)
+                self.values_log[i + 1] = log(v)
             else:
                 self.values_log[i + 1] = -100
         assert abs(self.values_log[-1]) < 10**(-6)
@@ -70,7 +72,7 @@ class WinningProbabilityFunction(object):
         hx = self.step * hi
         lf = self.values_log[lo + self.n]
         hf = self.values_log[hi + self.n]
-        return math.exp((lf * (hx - x) + hf * (x - lx)) / self.step)
+        return exp((lf * (hx - x) + hf * (x - lx)) / self.step)
 
     def calc_vector(self, vx):
         return list(map(self.calc, vx))
@@ -93,15 +95,18 @@ class WinningProbabilityFunction(object):
             x += self.step
         return s
 
+    def init(self):
+        return [random() for i in range(2 * self.n)]
+
 
 class Optimizer(object):
     def __init__(self):
         self.f = WinningProbabilityFunction()
-        self.ref_coef = 1.0
+        self.ref_coef = 0.01
         self.func_reg_coef = 1.0
         self.func_soft_reg_coef = 0.1
 
-    def load_games(games):
+    def load_games(self, results):
         """Load the list of game results.
 
         Args:
@@ -110,15 +115,16 @@ class Optimizer(object):
         """
         self.games_ = results
         # player -> date -> games list
-        self.player_date_games = self.generate_player_date_games_()
-        self.rating_vars_index_ = self.generate_rating_vars_index_()
+        self.player_date_games_ = self.generate_player_date_games_()
+        self.rating_vars_index_, index_by_player_date = self.generate_rating_vars_index_()
+        self.nvars_ = len(self.rating_vars_index_)
         self.rating_delta_coefficients_ = self.generate_rating_deltas_()
         self.wins_rating_index_ = []
         self.losses_rating_index_ = []
         self.draws_rating_index_ = []
         for player1, player2, date, result in self.games_:
-            indices = (self.rating_vars_index_[(player1, date)],
-                       self.rating_vars_index_[(player2, date)])
+            indices = (index_by_player_date[(player1, date)],
+                       index_by_player_date[(player2, date)])
             if result == 0:
                 self.losses_rating_index_.append(indices)
             elif result == 1:
@@ -128,7 +134,7 @@ class Optimizer(object):
 
     def generate_player_date_games_(self):
         player_date_games = {}
-        for player1, player2, date, _ in results:
+        for player1, player2, date, _ in self.games_:
             if player1 not in player_date_games:
                 player_date_games[player1] = {}
             if date not in player_date_games[player1]:
@@ -145,10 +151,12 @@ class Optimizer(object):
 
     def generate_rating_vars_index_(self):
         v = []
-        for player in self.player_date_games_:
-            for date in self.player_date_games_:
+        index_by_player_date = {}
+        for player in self.player_date_games_.keys():
+            for date in sorted(self.player_date_games_[player].keys()):
                 v.append((player, date))
-        return v
+                index_by_player_date[(player, date)] = len(v)
+        return v, index_by_player_date
 
     def generate_rating_deltas_(self):
         """Generate a table of coefficients to rating changes.
@@ -161,9 +169,9 @@ class Optimizer(object):
 
         delta_coef = []
         last_player, last_date = self.rating_vars_index_[0]
-        last_games = len(self.player_date_games_[last_player][last_date])
+        last_games = self.player_date_games_[last_player][last_date]
         for player, date in self.rating_vars_index_[1:]:
-            games = len(self.player_date_games_[player][date])
+            games = self.player_date_games_[player][date]
             if player == last_player:
                 delta_coef.append(1 / (date - last_date) +
                                   1 / (games + last_games))
@@ -171,28 +179,44 @@ class Optimizer(object):
                 delta_coef.append(0)
             last_player, last_date, last_games = player, date, games
 
-        return coef
+        return delta_coef
 
     def regularization(self, v):
-        r = sum((v - 2000)**2
+        r = sum((vv - 2000)**2 for vv in v) / 10000
+        for i in range(len(v) - 1):
+            r += self.rating_delta_coefficients_[i] * abs(v[i + 1] - v[i])
+        return r
 
     def objective(self, v):
-        self.f.reset_from_vars(v[len(self.games_):])
+        self.f.reset_from_vars(v[self.nvars_:])
 
-        wins_rating_delta = v[i] - v[j] for i, j in self.wins_rating_index_
-        wins_propabilities = self.f.calc_vector(wins_rating_delta)
-        wins_likelihood = sum(log(p) for p in winds_probabilities)
+        wins_rating_delta = ((v[i] - v[j]) for i, j in self.wins_rating_index_)
+        wins_probabilities = self.f.calc_vector(wins_rating_delta)
+        wins_likelihood = sum(log(p) for p in wins_probabilities)
 
-        losses_rating_delta = v[i] - v[j] for i, j in self.losses_rating_index_
-        losses_probablilities = self.f.calc_vector(losses_rating_delta)
-        losses_likelihood = sum(log(1 - p) for p in losses_probablilities)
+        losses_rating_delta = (v[i] - v[j] for i, j in self.losses_rating_index_)
+        losses_probabilities = self.f.calc_vector(losses_rating_delta)
+        losses_likelihood = sum(log(1 - p) for p in losses_probabilities)
 
-        draws_rating_delta = v[i] - v[j] for i, j in self.draws_rating_index_
-        draws_probabilities = self.f.calc_vector(draws_probabilities)
-        draws_likelihood = sum((log(p) + log(1 - p)
+        draws_rating_delta = (v[i] - v[j] for i, j in self.draws_rating_index_)
+        draws_probabilities = self.f.calc_vector(draws_rating_delta)
+        draws_likelihood = sum(log(p) + log(1 - p)
                                for p in draws_probabilities) / 2
 
         return (wins_likelihood + losses_likelihood + draws_likelihood -
-                self.regularization(v[:len(self.games_)]) -
-                self.reg_coef * self.f.regularization() -
+                self.regularization(v[:self.nvars_]) -
+                self.func_reg_coef * self.f.hard_regularization() -
                 self.func_soft_reg_coef * self.f.soft_regularization())
+
+    def init(self):
+        return [2000 + random() for i in range(self.nvars_)] + self.f.init()
+
+    def run(self):
+        init_point = self.init()
+        def show(*args):
+            print(args)
+        res = fmin_bfgs(self.objective, init_point, disp=True, callback=show)
+        self.f.reset_from_vars(res[self.nvars_:])
+        for x in range(-400, 401, 50):
+            print('f({}) = {}'.format(x, self.f.calc(x)))
+

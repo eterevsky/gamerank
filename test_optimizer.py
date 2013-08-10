@@ -2,7 +2,13 @@ import unittest
 
 from optimizer import Optimizer, WinningProbabilityFunction
 
-class TestPGNParser(unittest.TestCase):
+GAMES = [(1, 2, 1, 1),
+         (2, 3, 1, 1),
+         (1, 3, 2, 2),
+         (3, 2, 3, 0),
+         (3, 2, 3, 1)]
+
+class TestOptimizer(unittest.TestCase):
 
     def test_probability_func(self):
         f = WinningProbabilityFunction(n_points=4, steps_in_200=2)
@@ -33,3 +39,7 @@ class TestPGNParser(unittest.TestCase):
         self.assertAlmostEqual(f.hard_regularization(), 0)
         self.assertGreater(f.soft_regularization(), 0)
 
+    def test_prepare_data(self):
+        o = Optimizer()
+        o.load_games(GAMES)
+        self.assertEqual(o.nvars_, 9)
