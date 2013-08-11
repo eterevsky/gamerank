@@ -127,18 +127,24 @@ class TestOptimizer(unittest.TestCase):
         self.assertTrue(1 < games_change1 < 100)
 
     def test_time_regularization(self):
-        o = Optimizer(rating_reg=1E-4, rand_seed=239, time_delta=1.0,
+        o = Optimizer(rating_reg=1E-4, rand_seed=239, time_delta=0.01,
                       games_delta=0.0)
         o.load_games(GAMES3)
-        rating, f, _ = o.run()
+        rating, f, v = o.run()
         _, rating11 = rating[1][0]
         _, rating12 = rating[1][1]
         _, rating21 = rating[2][0]
         _, rating22 = rating[2][1]
+
+        (total1, wins_likelihood1, losses_likelihood1, draws_likelihood1,
+         regularization1, time_change1, games_change1,
+         func_hard_reg, func_soft_reg) = o.objective(v, verbose=True)
+        self.assertLess(func_hard_reg, 1)
+
+
         self.assertGreater(rating11, rating12)
         self.assertLess(rating21, rating22)
         self.assertGreater(rating11, rating21)
         self.assertLess(rating12, rating22)
         self.assertGreater(f.calc(rating11 - rating21), 0.6)
         self.assertLess(f.calc(rating12 - rating22), 0.4)
-

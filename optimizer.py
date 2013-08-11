@@ -105,7 +105,7 @@ class LogisticProbabilityFunction(object):
         self.s = 1
 
     def init(self):
-        return [random() - 0.5, 5 * random()]
+        return [0, 20]
 
     def reset_from_vars(self, var):
         self.mu, self.s = var[0], var[1]*var[1]
@@ -150,7 +150,7 @@ class LogisticProbabilityFunction(object):
 
 
 class Optimizer(object):
-    def __init__(self, disp=False, func_hard_reg=10.0, func_soft_reg=0.01,
+    def __init__(self, disp=False, func_hard_reg=100.0, func_soft_reg=0.01,
                  time_delta=1.0, games_delta=1.0, rating_reg=1.0,
                  rand_seed=None):
         seed(rand_seed)
