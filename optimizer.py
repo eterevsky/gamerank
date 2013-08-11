@@ -1,6 +1,7 @@
 from math import exp, log, tanh
+import numpy
 from random import random, seed
-from scipy.optimize import fmin_bfgs, fmin_ncg
+from scipy.optimize import minimize
 
 class WinningProbabilityFunction(object):
     """Probablity of winning based on difference of ratings.
@@ -151,7 +152,7 @@ class LogisticProbabilityFunction(object):
 
 class Optimizer(object):
     def __init__(self, disp=False, func_hard_reg=100.0, func_soft_reg=0.01,
-                 time_delta=1.0, games_delta=1.0, rating_reg=1.0,
+                 time_delta=1.0, games_delta=1.0, rating_reg=1E-4,
                  rand_seed=None):
         seed(rand_seed)
         self.f = LogisticProbabilityFunction()
@@ -250,7 +251,7 @@ class Optimizer(object):
     def create_vars(self, ratings, fparam):
         v = [0] * self.nvars_
         for player, r in ratings.items():
-            for date, rating in r:
+            for date, rating in r.items():
                 i = self.rating_vars_index_.index((player, date))
                 v[i] = rating
         v += fparam
@@ -259,10 +260,10 @@ class Optimizer(object):
     def objective(self, v, verbose=False):
         self.f.reset_from_vars(v[self.nvars_:])
 
-        wins_rating_delta = list((v[i] - v[j]) for i, j in self.wins_rating_index_)
+        wins_rating_delta = (v[i] - v[j] for i, j in self.wins_rating_index_)
         wins_likelihood = sum(self.f.calc_log_vector(wins_rating_delta))
 
-        losses_rating_delta = list(v[i] - v[j] for i, j in self.losses_rating_index_)
+        losses_rating_delta = (v[i] - v[j] for i, j in self.losses_rating_index_)
         losses_likelihood = sum(self.f.calc_1mlog_vector(losses_rating_delta))
 
         draws_rating_delta = (v[i] - v[j] for i, j in self.draws_rating_index_)
@@ -297,22 +298,24 @@ class Optimizer(object):
         """Convert a point to player's ratings:
 
         Returns:
-            {playerid: [(date, rating)]}
+            {playerid: {date: rating}}
         """
         rating = {}
         for i in range(self.nvars_):
             player, date = self.rating_vars_index_[i]
             if player not in rating:
-                rating[player] = []
-            rating[player].append((date, point[i]))
+                rating[player] = {}
+            rating[player][date] = point[i]
         return rating
 
     def run(self):
         init_point = self.init()
-        res = fmin_bfgs(self.objective, init_point, disp=self.disp)
-        ratings = self.ratings_from_point(res)
-        self.f.reset_from_vars(res[self.nvars_:])
-        return ratings, self.f, res
+        res = minimize(self.objective, init_point,
+                       method='CG',
+                       options={'disp': self.disp})
+        ratings = self.ratings_from_point(res.x)
+        self.f.reset_from_vars(res.x[self.nvars_:])
+        return ratings, self.f, res.x
 
     def random_solution(self):
         point = self.init()

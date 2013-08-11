@@ -16,10 +16,9 @@ GAMES3 = [(1, 2, 1, 1),
 GAMES3A = [(1, 2, 1, 1),
            (1, 2, 100, 0)]
 
-GAMES3B = [(1, 2, 1, 1),
-           (1, 2, 1, 1),
-           (1, 2, 2, 0),
-           (1, 2, 2, 0)]
+GAMES4 = [(1, 2, 1, 2),
+          (2, 1, 1, 2)]
+
 
 class TestOptimizer(unittest.TestCase):
 
@@ -64,16 +63,16 @@ class TestOptimizer(unittest.TestCase):
         self.assertEqual(len(ratings), 3)
         self.assertEqual(list(sorted(ratings.keys())), [1, 2, 3])
         for player_rating in ratings.values():
-            for date, r in player_rating:
+            for r in player_rating.values():
                 self.assertTrue(1000 < r < 3000)
-        self.assertEqual(list(d for d, _ in ratings[1]), [1, 2])
-        self.assertEqual(list(d for d, _ in ratings[2]), [1, 3, 4])
-        self.assertEqual(list(d for d, _ in ratings[3]), [1, 2, 3, 4])
+        self.assertEqual(list(sorted(ratings[1].keys())), [1, 2])
+        self.assertEqual(list(sorted(ratings[2].keys())), [1, 3, 4])
+        self.assertEqual(list(sorted(ratings[3].keys())), [1, 2, 3, 4])
 
     def test_objective_single(self):
         o = Optimizer()
         o.load_games(GAMES2)
-        v = o.create_vars({1: [(1, 2200)], 2:[(1, 1800)]}, (0, 10))
+        v = o.create_vars({1: {1: 2200}, 2: {1: 1800}}, (0, 10))
         (total1, wins_likelihood1, losses_likelihood1, draws_likelihood1,
          regularization1, time_change1, games_change1, func_hard_reg,
          func_soft_reg) = o.objective(v, verbose=True)
@@ -86,7 +85,7 @@ class TestOptimizer(unittest.TestCase):
         self.assertTrue(10 < func_hard_reg)
         self.assertTrue(0.01 < func_soft_reg < 10)
 
-        v = o.create_vars({1: [(1, 1800)], 2:[(1, 2200)]}, (0, 10))
+        v = o.create_vars({1: {1: 1800}, 2: {1: 2200}}, (0, 10))
         (total2, wins_likelihood2, losses_likelihood2, draws_likelihood2,
          regularization2, _, _, _, _) = o.objective(v, verbose=True)
         self.assertAlmostEqual(regularization1, regularization2)
@@ -99,12 +98,10 @@ class TestOptimizer(unittest.TestCase):
         o = Optimizer(rating_reg=1E-4, rand_seed=239)
         o.load_games(GAMES2)
         ratings, f, v = o.run()
-        _, rating1 = ratings[1][0]
-        _, rating2 = ratings[2][0]
-        self.assertTrue(100 < rating1 < 4000)
-        self.assertTrue(100 < rating2 < 4000)
-        self.assertGreater(rating1, rating2)
-        self.assertGreater(f.calc(rating1 - rating2), 0.5)
+        self.assertTrue(100 < ratings[1][1] < 4000)
+        self.assertTrue(100 < ratings[2][1] < 4000)
+        self.assertGreater(ratings[1][1], ratings[2][1])
+        self.assertGreater(f.calc(ratings[1][1] - ratings[2][1]), 0.5)
 
         (total, wins_likelihood, losses_likelihood, draws_likelihood,
          regularization, time_change, games_change, func_hard_reg,
@@ -114,8 +111,8 @@ class TestOptimizer(unittest.TestCase):
         o = Optimizer(rating_reg=1E-4, rand_seed=239, time_delta=1.0,
                       games_delta=0.0)
         o.load_games(GAMES3)
-        v = o.create_vars({1: [(1, 2200), (2, 1800)],
-                           2: [(1, 1800), (2, 2200)]}, (0, 10))
+        v = o.create_vars({1: {1: 2200, 2: 1800}, 2: {1: 1800, 2: 2200}},
+                          (0, 10))
         (total1, wins_likelihood1, losses_likelihood1, draws_likelihood1,
          regularization1, time_change1, games_change1,
          _, _) = o.objective(v, verbose=True)
@@ -131,20 +128,48 @@ class TestOptimizer(unittest.TestCase):
                       games_delta=0.0)
         o.load_games(GAMES3)
         rating, f, v = o.run()
-        _, rating11 = rating[1][0]
-        _, rating12 = rating[1][1]
-        _, rating21 = rating[2][0]
-        _, rating22 = rating[2][1]
 
-        (total1, wins_likelihood1, losses_likelihood1, draws_likelihood1,
-         regularization1, time_change1, games_change1,
-         func_hard_reg, func_soft_reg) = o.objective(v, verbose=True)
+        (total1, _, _, _, _, time_change1,
+         _, func_hard_reg, _) = o.objective(v, verbose=True)
         self.assertLess(func_hard_reg, 1)
+        self.assertGreater(time_change1, 0.1)
+
+        self.assertGreater(rating[1][1], rating[1][2])
+        self.assertLess(rating[2][1], rating[2][2])
+        self.assertGreater(rating[1][1], rating[2][1])
+        self.assertLess(rating[1][2], rating[2][2])
+        prob1 = f.calc(rating[1][1] - rating[2][1])
+        self.assertGreater(prob1, 0.6)
+        prob2 = f.calc(rating[1][2] - rating[2][2])
+        self.assertLess(prob2, 0.4)
+
+        o.load_games(GAMES3A)
+        ratinga, f, v = o.run()
+
+        (total2, _, _, _, _, time_change2, _, _, _) = o.objective(v, verbose=True)
+        self.assertLess(time_change2, time_change1)
+        self.assertGreater(abs(ratinga[1][100] - ratinga[1][1]),
+                           abs(rating[1][2] - rating[1][1]))
+        self.assertGreater(abs(ratinga[2][100] - ratinga[2][1]),
+                           abs(rating[2][2] - rating[2][1]))
+        self.assertGreater(f.calc(ratinga[1][1] - ratinga[2][1]), prob1)
+        self.assertLess(f.calc(ratinga[1][100] - ratinga[2][100]), prob2)
 
 
-        self.assertGreater(rating11, rating12)
-        self.assertLess(rating21, rating22)
-        self.assertGreater(rating11, rating21)
-        self.assertLess(rating12, rating22)
-        self.assertGreater(f.calc(rating11 - rating21), 0.6)
-        self.assertLess(f.calc(rating12 - rating22), 0.4)
+    def test_draw(self):
+        o = Optimizer(rand_seed=239)
+        o.load_games(GAMES4)
+        rating, f, _ = o.run()
+
+        self.assertAlmostEqual(f.calc(0), 0.5, 3)
+        self.assertLess(abs(rating[1][1] - rating[2][1]), 5)
+
+    def test_games1(self):
+        o = Optimizer(rand_seed=239, time_delta=0.01, games_delta=0.01)
+        o.load_games(GAMES1)
+        rating, f, _ = o.run()
+
+        self.assertGreater(rating[1][1], rating[2][1])
+        self.assertGreater(rating[2][1], rating[3][1])
+        self.assertLess(rating[1][2], rating[1][1])
+        self.assertGreater(rating[3][4], rating[3][3])
