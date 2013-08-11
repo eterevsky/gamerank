@@ -13,6 +13,14 @@ GAMES2 = [(1, 2, 1, 1)]
 GAMES3 = [(1, 2, 1, 1),
           (1, 2, 2, 0)]
 
+GAMES3A = [(1, 2, 1, 1),
+           (1, 2, 100, 0)]
+
+GAMES3B = [(1, 2, 1, 1),
+           (1, 2, 1, 1),
+           (1, 2, 2, 0),
+           (1, 2, 2, 0)]
+
 class TestOptimizer(unittest.TestCase):
 
     def test_probability_func(self):
@@ -87,8 +95,6 @@ class TestOptimizer(unittest.TestCase):
         self.assertLess(wins_likelihood2, wins_likelihood1)
         self.assertGreater(total2, total1)
 
-    def test_objective2(self):
-
     def test_single_game(self):
         o = Optimizer(rating_reg=1E-4, rand_seed=239)
         o.load_games(GAMES2)
@@ -103,4 +109,36 @@ class TestOptimizer(unittest.TestCase):
         (total, wins_likelihood, losses_likelihood, draws_likelihood,
          regularization, time_change, games_change, func_hard_reg,
          func_soft_reg) = o.objective(v, verbose=True)
+
+    def test_objective_time_reg(self):
+        o = Optimizer(rating_reg=1E-4, rand_seed=239, time_delta=1.0,
+                      games_delta=0.0)
+        o.load_games(GAMES3)
+        v = o.create_vars({1: [(1, 2200), (2, 1800)],
+                           2: [(1, 1800), (2, 2200)]}, (0, 10))
+        (total1, wins_likelihood1, losses_likelihood1, draws_likelihood1,
+         regularization1, time_change1, games_change1,
+         _, _) = o.objective(v, verbose=True)
+        self.assertLess(wins_likelihood1, 0)
+        self.assertLess(losses_likelihood1, 0)
+        self.assertAlmostEqual(draws_likelihood1, 0)
+        self.assertTrue(0.01 < regularization1 < 10)
+        self.assertTrue(1 < time_change1 < 100)
+        self.assertTrue(1 < games_change1 < 100)
+
+    def test_time_regularization(self):
+        o = Optimizer(rating_reg=1E-4, rand_seed=239, time_delta=1.0,
+                      games_delta=0.0)
+        o.load_games(GAMES3)
+        rating, f, _ = o.run()
+        _, rating11 = rating[1][0]
+        _, rating12 = rating[1][1]
+        _, rating21 = rating[2][0]
+        _, rating22 = rating[2][1]
+        self.assertGreater(rating11, rating12)
+        self.assertLess(rating21, rating22)
+        self.assertGreater(rating11, rating21)
+        self.assertLess(rating12, rating22)
+        self.assertGreater(f.calc(rating11 - rating21), 0.6)
+        self.assertLess(f.calc(rating12 - rating22), 0.4)
 

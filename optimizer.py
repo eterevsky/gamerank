@@ -119,6 +119,27 @@ class LogisticProbabilityFunction(object):
     def calc_vector(self, vx):
         return list(map(self.calc, vx))
 
+    def calc_log(self, x):
+        y = (x - self.mu) / self.s
+        if y > 0:
+            return -log(1 + exp(-2*y))
+        else:
+            return 2*y - log(exp(2*y) + 1)
+
+    def calc_log_vector(self, vx):
+        return map(self.calc_log, vx)
+
+    def calc_1mlog(self, x):
+        """Calculate log(1 - f(x))"""
+        y = (x - self.mu) / self.s
+        if y > 0:
+            return -2*y - log(1 + exp(-2*y))
+        else:
+            return -log(1 + exp(2*y))
+
+    def calc_1mlog_vector(self, vx):
+        return map(self.calc_1mlog, vx)
+
     def hard_regularization(self):
         elo_norm = self.calc(200) - self.calc(-200)
         return 1000 * (elo_norm - 0.5)**2
@@ -129,7 +150,7 @@ class LogisticProbabilityFunction(object):
 
 
 class Optimizer(object):
-    def __init__(self, disp=False, func_hard_reg=0.1, func_soft_reg=0.01,
+    def __init__(self, disp=False, func_hard_reg=10.0, func_soft_reg=0.01,
                  time_delta=1.0, games_delta=1.0, rating_reg=1.0,
                  rand_seed=None):
         seed(rand_seed)
@@ -224,7 +245,7 @@ class Optimizer(object):
         for i in range(self.nvars_ - 1):
             time_change += self.time_delta_vector_[i] * abs(v[i + 1] - v[i])
             games_change += self.games_delta_vector_[i] * abs(v[i + 1] - v[i])
-        return time_change, games_change
+        return time_change / 10, games_change / 10
 
     def create_vars(self, ratings, fparam):
         v = [0] * self.nvars_
@@ -239,17 +260,14 @@ class Optimizer(object):
         self.f.reset_from_vars(v[self.nvars_:])
 
         wins_rating_delta = list((v[i] - v[j]) for i, j in self.wins_rating_index_)
-        wins_probabilities = self.f.calc_vector(wins_rating_delta)
-        wins_likelihood = sum(log(p) for p in wins_probabilities)
+        wins_likelihood = sum(self.f.calc_log_vector(wins_rating_delta))
 
-        losses_rating_delta = (v[i] - v[j] for i, j in self.losses_rating_index_)
-        losses_probabilities = self.f.calc_vector(losses_rating_delta)
-        losses_likelihood = sum(log(1 - p) for p in losses_probabilities)
+        losses_rating_delta = list(v[i] - v[j] for i, j in self.losses_rating_index_)
+        losses_likelihood = sum(self.f.calc_1mlog_vector(losses_rating_delta))
 
         draws_rating_delta = (v[i] - v[j] for i, j in self.draws_rating_index_)
-        draws_probabilities = self.f.calc_vector(draws_rating_delta)
-        draws_likelihood = sum(log(p) + log(1 - p)
-                               for p in draws_probabilities) / 2
+        draws_likelihood = (sum(self.f.calc_log_vector(draws_rating_delta)) +
+                            sum(self.f.calc_1mlog_vector(draws_rating_delta))) / 2
 
         regularization = sum((vv - 2000)**2 for vv in v) / 10**6
 
