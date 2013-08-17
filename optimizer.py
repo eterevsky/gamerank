@@ -1,7 +1,10 @@
-from math import exp, log, tanh
+from math import cosh, exp, log, tanh
 import numpy as np
 from random import random, seed
 from scipy.optimize import minimize
+
+def sech(x):
+    return 1 / cosh(x)
 
 class WinningProbabilityFunction(object):
     """Probablity of winning based on difference of ratings.
@@ -106,16 +109,19 @@ class LogisticProbabilityFunction(object):
         self.s = 1
 
     def init(self):
-        return [0, 20]
+        return [0, 400]
 
     def reset_from_vars(self, var):
-        self.mu, self.s = var[0], var[1]*var[1]
+        self.mu, self.s = var[0], var[1]
 
     def __str__(self):
         return "(1 + tanh((x - {}) / {})) / 2".format(self.mu, self.s)
 
     def calc(self, x):
         return (1 + tanh((x - self.mu) / self.s)) / 2
+
+    def deriv(self, x):
+        return sech((x - self.mu) / self.s) ** 2 / (2 * self.s)
 
     def calc_vector(self, vx):
         return list(map(self.calc, vx))
@@ -161,13 +167,28 @@ class LogisticProbabilityFunction(object):
         elo_norm = self.calc(200) - self.calc(-200)
         return 1000 * (elo_norm - 0.5)**2
 
+    def hard_reg_grad(self):
+        arg1 = (200 - self.mu) / self.s
+        arg2 = (-200 - self.mu) / self.s
+        return (500 * (tanh(arg1) - tanh(arg2) - 1) *
+                (sech(arg1)**2 * np.array([-1/self.s, -arg1/self.s]) -
+                 sech(arg2)**2 * np.array([-1/self.s, -arg2/self.s])))
+
     def soft_regularization(self):
         return self.mu*self.mu + self.s*self.s / 10000
+
+    def soft_reg_grad(self):
+        return np.array([2 * self.mu, self.s / 5000 ])
+
+    def params_grad(self, x):
+        d = sech((x - self.mu) / self.s) ** 2
+        return d * np.array([-1 / (2 * self.s),
+                             (self.mu - x) / (2 * self.s * self.s)])
 
 
 class Optimizer(object):
     def __init__(self, disp=False, func_hard_reg=100.0, func_soft_reg=0.01,
-                 time_delta=1.0, games_delta=1.0, rating_reg=1E-4,
+                 time_delta=0.2, games_delta=0.2, rating_reg=1E-4,
                  rand_seed=None):
         seed(rand_seed)
         self.f = LogisticProbabilityFunction()
@@ -176,7 +197,7 @@ class Optimizer(object):
         self.func_soft_reg = func_soft_reg
         self.time_delta = time_delta
         self.games_delta = games_delta
-        self.rating_reg = rating_reg
+        self.rating_reg = rating_reg * 1E-6
 
     def load_games(self, results):
         """Load the list of game results.
@@ -258,10 +279,6 @@ class Optimizer(object):
                 games_delta_vector.append(0)
             last_player, last_date, last_games = player, date, games
 
-        if self.time_delta == 0.00239:
-            print(self.time_delta * np.array(time_delta_vector) +
-                self.games_delta * np.array(games_delta_vector))
-
         return (self.time_delta * np.array(time_delta_vector) +
                 self.games_delta * np.array(games_delta_vector))
 
@@ -269,7 +286,7 @@ class Optimizer(object):
         rating_delta = v[1:self.nvars_] - v[0:self.nvars_ - 1]
         rating_delta *= rating_delta
         time_games_change = np.inner(rating_delta, self.time_games_delta_vector_)
-        return time_games_change / 10
+        return time_games_change
 
     def create_vars(self, ratings, fparam):
         v = [0] * self.nvars_
@@ -299,8 +316,7 @@ class Optimizer(object):
         draws_likelihood = (self.f.sum_log_vector(draws_rating_delta) +
                             self.f.sum_1mlog_vector(draws_rating_delta)) / 2
 
-        regularization = (np.linalg.norm(v[:self.nvars_] - self.reg_mean_) ** 2
-                          * 10**(-6))
+        regularization = np.linalg.norm(v[:self.nvars_] - self.reg_mean_) ** 2
 
         time_games_change = self.calc_deltas_(v)
 
@@ -315,10 +331,53 @@ class Optimizer(object):
 
         if verbose:
             return (-total, wins_likelihood, losses_likelihood, draws_likelihood,
-                    regularization, time_games_change, func_hard_reg,
+                    self.rating_reg * regularization, time_games_change, func_hard_reg,
                     func_soft_reg)
         else:
             return -total
+
+    def gradient(self, v):
+        self.f.reset_from_vars(v[self.nvars_:])
+        g = np.zeros(len(v), dtype=np.float64)
+
+        for a, b in self.wins_rating_index_:
+            rating_diff = v[a] - v[b]
+            d = 1 / self.f.calc(rating_diff)
+            t = self.f.deriv(rating_diff) * d
+            g[a] += t
+            g[b] -= t
+            g[self.nvars_:] += self.f.params_grad(rating_diff) * d
+
+        for a, b in self.losses_rating_index_:
+            rating_diff = v[a] - v[b]
+            d = - 1 / (1 - self.f.calc(rating_diff))
+            t = self.f.deriv(rating_diff) * d
+            g[a] += t
+            g[b] -= t
+            g[self.nvars_:] += self.f.params_grad(rating_diff) * d
+
+        for a, b in self.draws_rating_index_:
+            rating_diff = v[a] - v[b]
+            d = (1 / self.f.calc(rating_diff) -
+                 1 / (1 - self.f.calc(rating_diff))) / 2
+            t = self.f.deriv(rating_diff) * d
+            g[a] += t
+            g[b] -= t
+            g[self.nvars_:] += self.f.params_grad(rating_diff) * d
+
+        g[:self.nvars_] -= 2 * self.rating_reg * (v[:self.nvars_] - self.reg_mean_)
+
+        vdelta = v[1:self.nvars_] - v[:self.nvars_ - 1]
+        g[:self.nvars_ - 1] += 2 * self.time_games_delta_vector_ * vdelta
+        g[1:self.nvars_] -= 2 * self.time_games_delta_vector_ * vdelta
+
+        g[self.nvars_:] -= (self.f.hard_reg_grad() * self.func_hard_reg *
+                            len(self.games_))
+        g[self.nvars_:] -= (self.f.soft_reg_grad() * self.func_soft_reg *
+                            len(self.games_))
+
+        return -g
+
 
     def init(self):
         return np.array([2000 + random() for i in range(self.nvars_)] +
@@ -341,8 +400,9 @@ class Optimizer(object):
     def run(self):
         init_point = self.init()
         res = minimize(self.objective, init_point,
-                       method='Powell',
-                       options={'disp': self.disp})
+                       method='Newton-CG',
+                       options={'disp': self.disp},
+                       jac=self.gradient)
         ratings = self.ratings_from_point(res.x)
         self.f.reset_from_vars(res.x[self.nvars_:])
         return ratings, self.f, res.x
