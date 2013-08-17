@@ -190,7 +190,7 @@ class Optimizer(object):
         self.player_date_games_ = self.generate_player_date_games_()
         self.rating_vars_index_, index_by_player_date = self.generate_rating_vars_index_()
         self.nvars_ = len(self.rating_vars_index_)
-        self.time_delta_vector_, self.games_delta_vector_ = self.generate_rating_deltas_()
+        self.time_games_delta_vector_ = self.generate_rating_deltas_()
         self.wins_rating_index_ = []
         self.losses_rating_index_ = []
         self.draws_rating_index_ = []
@@ -258,13 +258,18 @@ class Optimizer(object):
                 games_delta_vector.append(0)
             last_player, last_date, last_games = player, date, games
 
-        return np.array(time_delta_vector), np.array(games_delta_vector)
+        if self.time_delta == 0.00239:
+            print(self.time_delta * np.array(time_delta_vector) +
+                self.games_delta * np.array(games_delta_vector))
 
-    def calc_deltas(self, v):
-        rating_delta = np.abs(v[1:self.nvars_] - v[0:self.nvars_ - 1])
-        time_change = np.inner(rating_delta, self.time_delta_vector_)
-        games_change = np.inner(rating_delta, self.games_delta_vector_)
-        return time_change / 10, games_change / 10
+        return (self.time_delta * np.array(time_delta_vector) +
+                self.games_delta * np.array(games_delta_vector))
+
+    def calc_deltas_(self, v):
+        rating_delta = v[1:self.nvars_] - v[0:self.nvars_ - 1]
+        rating_delta *= rating_delta
+        time_games_change = np.inner(rating_delta, self.time_games_delta_vector_)
+        return time_games_change / 10
 
     def create_vars(self, ratings, fparam):
         v = [0] * self.nvars_
@@ -279,7 +284,7 @@ class Optimizer(object):
         if len(index):
             return v[index[:,0]] - v[index[:,1]]
         else:
-            return  np.array([])
+            return np.array([])
 
     def objective(self, v, verbose=False):
         self.f.reset_from_vars(v[self.nvars_:])
@@ -297,21 +302,20 @@ class Optimizer(object):
         regularization = (np.linalg.norm(v[:self.nvars_] - self.reg_mean_) ** 2
                           * 10**(-6))
 
-        time_change, games_change = self.calc_deltas(v)
+        time_games_change = self.calc_deltas_(v)
 
         func_hard_reg = self.f.hard_regularization()
         func_soft_reg = self.f.soft_regularization()
 
         total = (wins_likelihood + losses_likelihood + draws_likelihood -
             self.rating_reg * regularization -
-            self.time_delta * time_change -
-            self.games_delta * games_change -
+            time_games_change -
             self.func_hard_reg * func_hard_reg * len(self.games_) -
             self.func_soft_reg * func_soft_reg * len(self.games_))
 
         if verbose:
             return (-total, wins_likelihood, losses_likelihood, draws_likelihood,
-                    regularization, time_change, games_change, func_hard_reg,
+                    regularization, time_games_change, func_hard_reg,
                     func_soft_reg)
         else:
             return -total
