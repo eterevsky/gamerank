@@ -130,12 +130,12 @@ class LogisticProbabilityFunction(object):
     def calc_log_vector(self, vx):
         return map(self.calc_log, vx)
 
-    def sum_log_vector2(self, vx):
+    def sum_log_vector(self, vx):
         vy = 2 * (vx - self.mu) / self.s
         return (np.sum(-np.log(1 + np.exp(-vy[vy > 0]))) +
                 np.sum(vy[vy <= 0] - np.log(np.exp(vy[vy <= 0]) + 1)))
 
-    def sum_log_vector(self, vx):
+    def sum_log_vector2(self, vx):
         return sum(self.calc_log_vector(vx))
 
     def calc_1mlog(self, x):
@@ -149,12 +149,12 @@ class LogisticProbabilityFunction(object):
     def calc_1mlog_vector(self, vx):
         return map(self.calc_1mlog, vx)
 
-    def sum_1mlog_vector2(self, vx):
+    def sum_1mlog_vector(self, vx):
         vy = 2 * (vx - self.mu) / self.s
         return (np.sum(-vy[vy > 0] - np.log(1 + np.exp(-vy[vy > 0]))) +
                 np.sum(-np.log(1 + np.exp(vy[vy <= 0]))))
 
-    def sum_1mlog_vector(self, vx):
+    def sum_1mlog_vector2(self, vx):
         return sum(self.calc_1mlog_vector(vx))
 
     def hard_regularization(self):
@@ -337,7 +337,7 @@ class Optimizer(object):
     def run(self):
         init_point = self.init()
         res = minimize(self.objective, init_point,
-                       method='CG',
+                       method='Powell',
                        options={'disp': self.disp})
         ratings = self.ratings_from_point(res.x)
         self.f.reset_from_vars(res.x[self.nvars_:])
