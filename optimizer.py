@@ -1,5 +1,5 @@
 from math import exp, log, tanh
-import numpy
+import numpy as np
 from random import random, seed
 from scipy.optimize import minimize
 
@@ -121,25 +121,41 @@ class LogisticProbabilityFunction(object):
         return list(map(self.calc, vx))
 
     def calc_log(self, x):
-        y = (x - self.mu) / self.s
+        y = 2 * (x - self.mu) / self.s
         if y > 0:
-            return -log(1 + exp(-2*y))
+            return -log(1 + exp(-y))
         else:
-            return 2*y - log(exp(2*y) + 1)
+            return y - log(exp(y) + 1)
 
     def calc_log_vector(self, vx):
         return map(self.calc_log, vx)
 
+    def sum_log_vector2(self, vx):
+        vy = 2 * (vx - self.mu) / self.s
+        return (np.sum(-np.log(1 + np.exp(-vy[vy > 0]))) +
+                np.sum(vy[vy <= 0] - np.log(np.exp(vy[vy <= 0]) + 1)))
+
+    def sum_log_vector(self, vx):
+        return sum(self.calc_log_vector(vx))
+
     def calc_1mlog(self, x):
         """Calculate log(1 - f(x))"""
-        y = (x - self.mu) / self.s
+        y = 2 * (x - self.mu) / self.s
         if y > 0:
-            return -2*y - log(1 + exp(-2*y))
+            return -y - log(1 + exp(-y))
         else:
-            return -log(1 + exp(2*y))
+            return -log(1 + exp(y))
 
     def calc_1mlog_vector(self, vx):
         return map(self.calc_1mlog, vx)
+
+    def sum_1mlog_vector2(self, vx):
+        vy = 2 * (vx - self.mu) / self.s
+        return (np.sum(-vy[vy > 0] - np.log(1 + np.exp(-vy[vy > 0]))) +
+                np.sum(-np.log(1 + np.exp(vy[vy <= 0]))))
+
+    def sum_1mlog_vector(self, vx):
+        return sum(self.calc_1mlog_vector(vx))
 
     def hard_regularization(self):
         elo_norm = self.calc(200) - self.calc(-200)
@@ -147,7 +163,6 @@ class LogisticProbabilityFunction(object):
 
     def soft_regularization(self):
         return self.mu*self.mu + self.s*self.s / 10000
-
 
 
 class Optimizer(object):
@@ -188,6 +203,11 @@ class Optimizer(object):
                 self.wins_rating_index_.append(indices)
             else:
                 self.draws_rating_index_.append(indices)
+        self.wins_rating_index_ = np.array(self.wins_rating_index_)
+        self.losses_rating_index_ = np.array(self.losses_rating_index_)
+        self.draws_rating_index_ = np.array(self.draws_rating_index_)
+
+        self.reg_mean_ = np.ones(self.nvars_, dtype=np.float64) * 2000.0
 
     def generate_player_date_games_(self):
         player_date_games = {}
@@ -238,14 +258,12 @@ class Optimizer(object):
                 games_delta_vector.append(0)
             last_player, last_date, last_games = player, date, games
 
-        return time_delta_vector, games_delta_vector
+        return np.array(time_delta_vector), np.array(games_delta_vector)
 
     def calc_deltas(self, v):
-        time_change = 0
-        games_change = 0
-        for i in range(self.nvars_ - 1):
-            time_change += self.time_delta_vector_[i] * abs(v[i + 1] - v[i])
-            games_change += self.games_delta_vector_[i] * abs(v[i + 1] - v[i])
+        rating_delta = np.abs(v[1:self.nvars_] - v[0:self.nvars_ - 1])
+        time_change = np.inner(rating_delta, self.time_delta_vector_)
+        games_change = np.inner(rating_delta, self.games_delta_vector_)
         return time_change / 10, games_change / 10
 
     def create_vars(self, ratings, fparam):
@@ -255,22 +273,29 @@ class Optimizer(object):
                 i = self.rating_vars_index_.index((player, date))
                 v[i] = rating
         v += fparam
-        return v
+        return np.array(v, dtype=np.float64)
+
+    def rating_delta_(self, v, index):
+        if len(index):
+            return v[index[:,0]] - v[index[:,1]]
+        else:
+            return  np.array([])
 
     def objective(self, v, verbose=False):
         self.f.reset_from_vars(v[self.nvars_:])
 
-        wins_rating_delta = (v[i] - v[j] for i, j in self.wins_rating_index_)
-        wins_likelihood = sum(self.f.calc_log_vector(wins_rating_delta))
+        wins_rating_delta = self.rating_delta_(v, self.wins_rating_index_)
+        wins_likelihood = self.f.sum_log_vector(wins_rating_delta)
 
-        losses_rating_delta = (v[i] - v[j] for i, j in self.losses_rating_index_)
-        losses_likelihood = sum(self.f.calc_1mlog_vector(losses_rating_delta))
+        losses_rating_delta = self.rating_delta_(v, self.losses_rating_index_)
+        losses_likelihood = self.f.sum_1mlog_vector(losses_rating_delta)
 
-        draws_rating_delta = (v[i] - v[j] for i, j in self.draws_rating_index_)
-        draws_likelihood = (sum(self.f.calc_log_vector(draws_rating_delta)) +
-                            sum(self.f.calc_1mlog_vector(draws_rating_delta))) / 2
+        draws_rating_delta = self.rating_delta_(v, self.draws_rating_index_)
+        draws_likelihood = (self.f.sum_log_vector(draws_rating_delta) +
+                            self.f.sum_1mlog_vector(draws_rating_delta)) / 2
 
-        regularization = sum((vv - 2000)**2 for vv in v) / 10**6
+        regularization = (np.linalg.norm(v[:self.nvars_] - self.reg_mean_) ** 2
+                          * 10**(-6))
 
         time_change, games_change = self.calc_deltas(v)
 
@@ -292,7 +317,8 @@ class Optimizer(object):
             return -total
 
     def init(self):
-        return [2000 + random() for i in range(self.nvars_)] + self.f.init()
+        return np.array([2000 + random() for i in range(self.nvars_)] +
+                           self.f.init())
 
     def ratings_from_point(self, point):
         """Convert a point to player's ratings:
