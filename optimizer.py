@@ -188,15 +188,13 @@ class LogisticProbabilityFunction(object):
 
 class Optimizer(object):
     def __init__(self, disp=False, func_hard_reg=100.0, func_soft_reg=0.01,
-                 time_delta=0.2, games_delta=0.2, rating_reg=1E-4,
-                 rand_seed=None):
+                 time_delta=0.2, rating_reg=1E-4, rand_seed=None):
         seed(rand_seed)
         self.f = LogisticProbabilityFunction()
         self.disp = disp
         self.func_hard_reg = func_hard_reg
         self.func_soft_reg = func_soft_reg
         self.time_delta = time_delta
-        self.games_delta = games_delta
         self.rating_reg = rating_reg * 1E-6
 
     def load_games(self, results):
@@ -211,7 +209,7 @@ class Optimizer(object):
         self.player_date_games_ = self.generate_player_date_games_()
         self.rating_vars_index_, index_by_player_date = self.generate_rating_vars_index_()
         self.nvars_ = len(self.rating_vars_index_)
-        self.time_games_delta_vector_ = self.generate_rating_deltas_()
+        self.time_delta_vector_ = self.generate_rating_deltas_()
         self.wins_rating_index_ = []
         self.losses_rating_index_ = []
         self.draws_rating_index_ = []
@@ -265,27 +263,23 @@ class Optimizer(object):
         TODO: Tune coefficients of each part.
         """
 
-        time_delta_vector = []
-        games_delta_vector = []
+        delta_vector = []
         last_player, last_date = self.rating_vars_index_[0]
         last_games = self.player_date_games_[last_player][last_date]
         for player, date in self.rating_vars_index_[1:]:
             games = self.player_date_games_[player][date]
             if player == last_player:
-                time_delta_vector.append(1 / (date - last_date))
-                games_delta_vector.append(1 / (games + last_games))
+                delta_vector.append(1 / (date - last_date + games + last_games))
             else:
-                time_delta_vector.append(0)
-                games_delta_vector.append(0)
+                delta_vector.append(0)
             last_player, last_date, last_games = player, date, games
 
-        return (self.time_delta * np.array(time_delta_vector) +
-                self.games_delta * np.array(games_delta_vector))
+        return self.time_delta * np.array(delta_vector)
 
     def calc_deltas_(self, v):
-        rating_delta = v[1:self.nvars_] - v[0:self.nvars_ - 1]
-        rating_delta *= rating_delta
-        time_games_change = np.inner(rating_delta, self.time_games_delta_vector_)
+        rating_delta = abs(v[1:self.nvars_] - v[0:self.nvars_ - 1])
+        time_games_change = np.inner(rating_delta,
+                                     self.time_delta_vector_)
         return time_games_change
 
     def create_vars(self, ratings, fparam):
@@ -330,9 +324,9 @@ class Optimizer(object):
             self.func_soft_reg * func_soft_reg * len(self.games_))
 
         if verbose:
-            return (-total, wins_likelihood, losses_likelihood, draws_likelihood,
-                    self.rating_reg * regularization, time_games_change, func_hard_reg,
-                    func_soft_reg)
+            return (-total, wins_likelihood, losses_likelihood,
+                    draws_likelihood, self.rating_reg * regularization,
+                    time_games_change, func_hard_reg, func_soft_reg)
         else:
             return -total
 
@@ -367,9 +361,9 @@ class Optimizer(object):
 
         g[:self.nvars_] -= 2 * self.rating_reg * (v[:self.nvars_] - self.reg_mean_)
 
-        vdelta = v[1:self.nvars_] - v[:self.nvars_ - 1]
-        g[:self.nvars_ - 1] += 2 * self.time_games_delta_vector_ * vdelta
-        g[1:self.nvars_] -= 2 * self.time_games_delta_vector_ * vdelta
+        vdelta_sign = np.sign(v[1:self.nvars_] - v[:self.nvars_ - 1])
+        g[:self.nvars_ - 1] += self.time_delta_vector_ * vdelta_sign
+        g[1:self.nvars_] -= self.time_delta_vector_ * vdelta_sign
 
         g[self.nvars_:] -= (self.f.hard_reg_grad() * self.func_hard_reg *
                             len(self.games_))

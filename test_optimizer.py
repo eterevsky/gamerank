@@ -135,7 +135,7 @@ class TestOptimizer(unittest.TestCase):
 
     def test_gradient(self):
         o = Optimizer(func_hard_reg=0, func_soft_reg=0, time_delta=0,
-                      games_delta=0, rating_reg=0)
+                      rating_reg=0)
         o.load_games(GAMES2)
         v = o.create_vars({1: {1: 2200}, 2: {1: 1800}}, (0, 100))
 
@@ -170,8 +170,7 @@ class TestOptimizer(unittest.TestCase):
          func_soft_reg) = o.objective(v, verbose=True)
 
     def test_objective_time_reg(self):
-        o = Optimizer(rating_reg=1E-4, rand_seed=239, time_delta=1.0,
-                      games_delta=0.0)
+        o = Optimizer(rating_reg=1E-4, rand_seed=239, time_delta=1.0)
         o.load_games(GAMES3)
         v = o.create_vars({1: {1: 2200, 2: 1800}, 2: {1: 1800, 2: 2200}},
                           (0, 100))
@@ -184,8 +183,7 @@ class TestOptimizer(unittest.TestCase):
         self.assertTrue(1E-6 < regularization1 < 1)
 
     def test_time_regularization(self):
-        o = Optimizer(rating_reg=1E-6, rand_seed=239, time_delta=0.0000239,
-                      games_delta=0.0)
+        o = Optimizer(rating_reg=1E-6, rand_seed=239, time_delta=0.0000239)
         o.load_games(GAMES3)
         rating, f, v = o.run()
 
@@ -213,7 +211,6 @@ class TestOptimizer(unittest.TestCase):
         self.assertGreater(f.calc(ratinga[1][1] - ratinga[2][1]), prob1)
         self.assertLess(f.calc(ratinga[1][100] - ratinga[2][100]), prob2)
 
-
     def test_draw(self):
         o = Optimizer(rand_seed=239)
         o.load_games(GAMES4)
@@ -223,7 +220,8 @@ class TestOptimizer(unittest.TestCase):
         self.assertLess(abs(rating[1][1] - rating[2][1]), 5)
 
     def test_gradient_games1(self):
-        o = Optimizer(rand_seed=239, time_delta=0.01, games_delta=0.01, func_hard_reg=0, func_soft_reg=0)
+        o = Optimizer(rand_seed=239, time_delta=0.01, func_hard_reg=0,
+                      func_soft_reg=0)
         o.load_games(GAMES1)
         v = o.init()
 
@@ -239,7 +237,7 @@ class TestOptimizer(unittest.TestCase):
             self.assertAlmostEqual(derivative(ocomp, v[i]), grad[i])
 
     def test_games1(self):
-        o = Optimizer(rand_seed=239, time_delta=0.01, games_delta=0.01)
+        o = Optimizer(rand_seed=239, time_delta=0.01)
         o.load_games(GAMES1)
         rating, f, _ = o.run()
 
@@ -247,3 +245,4 @@ class TestOptimizer(unittest.TestCase):
         self.assertGreater(rating[2][1], rating[3][1])
         self.assertLess(rating[1][2], rating[1][1])
         self.assertGreater(rating[3][4], rating[3][3])
+
