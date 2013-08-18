@@ -7,7 +7,7 @@ def main():
     db = DataBase('games.db')
     results = db.load_game_results()
     players = db.load_players()
-    optimizer = Optimizer(disp=True, rating_reg=1E-4, time_delta=1E-3, games_delta=1E-3)
+    optimizer = Optimizer(disp=True, rating_reg=1E-6, time_delta=1E-3)
     optimizer.load_games(results)
     ratings, f, _ = optimizer.run()
     by_rating = []
