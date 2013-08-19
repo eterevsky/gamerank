@@ -5,9 +5,9 @@ from optimizer import Optimizer
 
 def main():
     db = DataBase('games.db')
-    results = db.load_game_results()
+    results = db.load_game_results(mingames=100)
     players = db.load_players()
-    optimizer = Optimizer(disp=True, rating_reg=1E-6, time_delta=1E-3)
+    optimizer = Optimizer(disp=True, rating_reg=1E-6, time_delta=1E-2)
     optimizer.load_games(results)
     ratings, f, _ = optimizer.run()
     by_rating = []

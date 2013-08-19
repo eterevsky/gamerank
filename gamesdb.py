@@ -26,6 +26,10 @@ def _dates_compatible(date1, date1_precision, date2, date2_precision):
     return True
 
 
+class DuplicateGameError(Exception):
+    pass
+
+
 class DataBase(object):
 
     def __init__(self, path='games.db'):
@@ -80,10 +84,26 @@ class DataBase(object):
             players[row[0]] = row[1]
         return players
 
-    def load_game_results(self):
+    def load_game_results(self, mingames=1):
         cursor = self._conn.cursor()
+
+        cursor.execute("""SELECT playerid
+                            FROM (SELECT player.playerid, count(*) AS c
+                                  FROM player, game
+                                  WHERE player.playerid=game.playerid1
+                                     OR player.playerid=game.playerid2
+                                  GROUP BY player.playerid)
+                           WHERE c > ?""",
+                       (mingames,))
+
+        players = list(cursor.fetchall())
+
         cursor.execute("""SELECT playerid1, playerid2, date / (24*3600), result
-                          FROM game WHERE dateprecision=0""")
+                          FROM game
+                          WHERE dateprecision=0
+                            AND playerid1 IN ?
+                            AND playerid2 IN ?""",
+                       (players, players))
         results = []
         for row in cursor:
             results.append(tuple(row))
@@ -107,10 +127,11 @@ class DataBase(object):
                 lastname_from_name(row[5]) == game.player2_lastname()):
                 return row[0]
             elif len(game.moves) >= 19:
-                raise Exception('Two games with the same moves, but ' +
-                                'different metadata:\n' +
-                                'DB: ' + str(self.load_game(row[0])) + '\n' +
-                                'New: ' + str(game))
+                raise DuplicateGameError(
+                    'Two games with the same moves, but ' +
+                    'different metadata:\n' +
+                    'DB: ' + str(self.load_game(row[0])) + '\n' +
+                    'New: ' + str(game))
 
     def get_player(self, name):
         cursor = self._conn.cursor()
