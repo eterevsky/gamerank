@@ -1,7 +1,35 @@
 from math import cosh, exp, log, tanh
 import numpy as np
 from random import random, seed
-from scipy.optimize import minimize
+
+try:
+  from scipy.optimize import minimize
+except ImportError:
+  from scipy.optimize import fmin, fmin_powell, fmin_cg, fmin_bfgs, fmin_ncg
+
+  def minimize(func, x0, method='CG', options=None, jac=None):
+      method = method.lower()
+
+      if 'disp' in options:
+          disp=options['disp']
+
+      if method == 'nelder-mead':
+          x = fmin(func=func, x0=x0, disp=disp)
+      elif method == 'powell':
+          x =  fmin_powell(func=func, x0=x0, disp=disp)
+      elif method == 'cg':
+          x = fmin_cg(f=func, x0=x0, fprime=jac, disp=disp)
+      elif method == 'bfgs':
+          x = fmin_bfgs(f=func, x0=x0, fprime=jac, disp=disp)
+      elif method == 'newton-cg':
+          x = fmin_ncg(f=func, x0=x0, fprime=jac, disp=disp)
+
+      class Result(object):
+          def __init__(self, x):
+              self.x = x
+
+      return Result(x)
+
 
 def sech(x):
     return 1 / cosh(x)
