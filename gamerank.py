@@ -6,10 +6,11 @@ from optimizer import Optimizer
 def main():
     db = DataBase('games.db')
     results = db.load_game_results(mingames=100)
+    print('{} games loaded.'.format(len(results)))
     players = db.load_players()
     optimizer = Optimizer(disp=True, rating_reg=1E-6, time_delta=1E-2)
     optimizer.load_games(results)
-    ratings, f, _ = optimizer.run()
+    ratings, f, _ = optimizer.run(method='cg')
     by_rating = []
     for iplayer, rating in ratings.items():
         print(players[iplayer])

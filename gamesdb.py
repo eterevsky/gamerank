@@ -96,14 +96,14 @@ class DataBase(object):
                            WHERE c > ?""",
                        (mingames,))
 
-        players = list(cursor.fetchall())
+        players = list(x[0] for x in cursor)
 
         cursor.execute("""SELECT playerid1, playerid2, date / (24*3600), result
                           FROM game
                           WHERE dateprecision=0
-                            AND playerid1 IN ?
-                            AND playerid2 IN ?""",
-                       (players, players))
+                            AND playerid1 IN ({p})
+                            AND playerid2 IN ({p})""".format(
+                                p=(', '.join(map(str, players)))))
         results = []
         for row in cursor:
             results.append(tuple(row))
