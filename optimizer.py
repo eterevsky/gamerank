@@ -1,28 +1,29 @@
 from math import cosh, exp, log, tanh
 import numpy as np
 from random import random, seed
+import time
 
 try:
   from scipy.optimize import minimize
 except ImportError:
   from scipy.optimize import fmin, fmin_powell, fmin_cg, fmin_bfgs, fmin_ncg
 
-  def minimize(func, x0, method='CG', options=None, jac=None):
+  def minimize(func, x0, method='CG', options=None, jac=None, callback=None):
       method = method.lower()
 
       if 'disp' in options:
           disp=options['disp']
 
       if method == 'nelder-mead':
-          x = fmin(func=func, x0=x0, disp=disp)
+          x = fmin(func=func, x0=x0, disp=disp, callback=callback)
       elif method == 'powell':
-          x =  fmin_powell(func=func, x0=x0, disp=disp)
+          x =  fmin_powell(func=func, x0=x0, disp=disp, callback=callback)
       elif method == 'cg':
-          x = fmin_cg(f=func, x0=x0, fprime=jac, disp=disp)
+          x = fmin_cg(f=func, x0=x0, fprime=jac, disp=disp, callback=callback)
       elif method == 'bfgs':
-          x = fmin_bfgs(f=func, x0=x0, fprime=jac, disp=disp)
+          x = fmin_bfgs(f=func, x0=x0, fprime=jac, disp=disp, callback=callback)
       elif method == 'newton-cg':
-          x = fmin_ncg(f=func, x0=x0, fprime=jac, disp=disp)
+          x = fmin_ncg(f=func, x0=x0, fprime=jac, disp=disp, callback=callback)
 
       class Result(object):
           def __init__(self, x):
@@ -225,6 +226,9 @@ class Optimizer(object):
         self.time_delta = time_delta
         self.rating_reg = rating_reg * 1E-6
 
+        self.objective_calls = 0
+        self.gradient_calls = 0
+
     def load_games(self, results):
         """Load the list of game results.
 
@@ -326,6 +330,8 @@ class Optimizer(object):
             return np.array([])
 
     def objective(self, v, verbose=False):
+        self.objective_calls += 1
+
         self.f.reset_from_vars(v[self.nvars_:])
 
         wins_rating_delta = self.rating_delta_(v, self.wins_rating_index_)
@@ -359,6 +365,7 @@ class Optimizer(object):
             return -total
 
     def gradient(self, v):
+        self.gradient_calls += 1
         self.f.reset_from_vars(v[self.nvars_:])
         g = np.zeros(len(v), dtype=np.float64)
 
@@ -402,7 +409,7 @@ class Optimizer(object):
 
 
     def init(self):
-        return np.array([2000 + random() for i in range(self.nvars_)] +
+        return np.array([2000 + 1000*random() for i in range(self.nvars_)] +
                            self.f.init())
 
     def ratings_from_point(self, point):
@@ -419,12 +426,36 @@ class Optimizer(object):
             rating[player][date] = point[i]
         return rating
 
-    def run(self):
+    def callback(self, xk):
+        self.optimization_steps += 1
+
+        if (time.time() - self.last_check > 10 or
+            self.optimization_steps - self.last_step_check > 1000):
+            o = self.objective(xk)
+            gn = np.linalg.norm(self.gradient(xk))
+
+            print(('Step {}. Objective {}, calculated {} times.\n' +
+                  'Gradient norm {}, calculated {} times.').format(
+                      self.optimization_steps, o, self.objective_calls,
+                      gn, self.gradient_calls))
+
+            self.last_step_check = self.optimization_steps
+            self.last_check = time.time()
+
+
+    def run(self, method='cg'):
         init_point = self.init()
+        self.objective_calls = 0
+        self.gradient_calls = 0
+        self.optimization_steps = 0
+        self.start_time = time.time()
+        self.last_check = self.start_time
+        self.last_step_check = 0
         res = minimize(self.objective, init_point,
-                       method='Newton-CG',
+                       method=method,
                        options={'disp': self.disp},
-                       jac=self.gradient)
+                       jac=self.gradient,
+                       callback=self.callback)
         ratings = self.ratings_from_point(res.x)
         self.f.reset_from_vars(res.x[self.nvars_:])
         return ratings, self.f, res.x
