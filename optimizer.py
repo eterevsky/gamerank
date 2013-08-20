@@ -33,103 +33,7 @@ except ImportError:
 
 
 def sech(x):
-    return 1 / cosh(x)
-
-class WinningProbabilityFunction(object):
-    """Probablity of winning based on difference of ratings.
-
-    f(d) = P(A wins as white vs B as black | rating(A) - rating(B) = d)
-
-    To normalize as in ELO rating, the following should hold:
-    (f(200) + (1 - f(-200)) / 2 = 0.75,
-    which is the same as:
-    f(200) - f(-200) = 0.5
-
-    The function is defined by its value in a set of points. The points are:
-    -n*step, -(n-1)*step, ..., -2*step, -step, 0, step, 2*step, ..., n*step
-    step should be chosen so that 200 = step*k for some integer k < n.
-
-    f(-n*step) = 0
-    f(n*step) = 1
-
-    The values of the function in the points are extracted from 2*n parameters
-    a[0] .. a[2*n - 1] in the following way:
-
-    s = a[0] + ... + a[2*n - 1]
-    f((i+1)*step) - f(i*step) = a[n + i] / s
-
-    For x not in point:
-    f(x) = 0 for x <= -n*step
-    f(x) = 1 for x >= n* step
-    f(x) = exp((log(k*step)*((k+1)*step - x) +
-                log((k+1)*step) * (x - k*step))) / step)
-             for k*step < x < (k+1)*step
-
-    """
-
-    def __init__(self, nparameters=8):
-        assert nparameters % 2 == 0
-        self.step = 100
-        self.n = nparameters // 2
-        self.max = self.n * self.step
-        self.min = -self.max
-        self.values_log = [0] * (2*self.n + 1)
-        self.values_log[0] = -100
-        self.s = 1
-
-    def reset_from_vars(self, var):
-        self.s = sum(var)
-        v = 0
-        for i in range(len(var)):
-            v += var[i] / self.s
-            if v > 0:
-                self.values_log[i + 1] = log(v)
-            else:
-                self.values_log[i + 1] = -100
-        assert abs(self.values_log[-1]) < 10**(-6)
-
-    def calc(self, x):
-        if x <= self.min:
-            return 1E-10
-        if x >= self.max:
-            return 1.0 - 1E-10
-        lo = -self.n
-        hi = self.n
-        while hi - lo > 1:
-            mid = (hi + lo) // 2
-            if x > mid * self.step:
-                lo = mid
-            else:
-                hi = mid
-        lx = self.step * lo
-        hx = self.step * hi
-        lf = self.values_log[lo + self.n]
-        hf = self.values_log[hi + self.n]
-        return exp((lf * (hx - x) + hf * (x - lx)) / self.step)
-
-    def calc_vector(self, vx):
-        return list(map(self.calc, vx))
-
-    def hard_regularization(self):
-        elo_norm = self.calc(200) - self.calc(-200)
-        return (self.s - 1)**2 + (elo_norm - 0.5)**2
-
-    def soft_regularization(self):
-        s = 0
-        x = self.min
-        while x <= -400:
-            s += self.calc(x) ** 2
-            x += self.step
-        while x <= 400:
-            s += (self.calc(x) - (x + 400) / 800) ** 2
-            x += self.step
-        while x <= self.max:
-            s += (self.calc(x) - 1) ** 2
-            x += self.step
-        return s
-
-    def init(self):
-        return [random() for i in range(2 * self.n)]
+    return 1 / np.cosh(x)
 
 
 class LogisticProbabilityFunction(object):
@@ -147,13 +51,13 @@ class LogisticProbabilityFunction(object):
         return "(1 + tanh((x - {}) / {})) / 2".format(self.mu, self.s)
 
     def calc(self, x):
-        return (1 + tanh((x - self.mu) / self.s)) / 2
+        return 0.5 + 0.5 * tanh((x - self.mu) / self.s)
+
+    def calc_vector(self, x):
+        return 0.5 + 0.5 * np.tanh((x - self.mu) / self.s)
 
     def deriv(self, x):
         return sech((x - self.mu) / self.s) ** 2 / (2 * self.s)
-
-    def calc_vector(self, vx):
-        return list(map(self.calc, vx))
 
     def calc_log(self, x):
         y = 2 * (x - self.mu) / self.s
@@ -165,15 +69,15 @@ class LogisticProbabilityFunction(object):
     def calc_log_vector(self, vx):
         return map(self.calc_log, vx)
 
-    def sum_log_vector(self, vx):
+    def sum_log(self, vx):
         vy = 2 * (vx - self.mu) / self.s
         return (np.sum(-np.log(1 + np.exp(-vy[vy > 0]))) +
                 np.sum(vy[vy <= 0] - np.log(np.exp(vy[vy <= 0]) + 1)))
 
-    def sum_log_vector2(self, vx):
+    def sum_log2(self, vx):
         return sum(self.calc_log_vector(vx))
 
-    def calc_1mlog(self, x):
+    def calc_log1m(self, x):
         """Calculate log(1 - f(x))"""
         y = 2 * (x - self.mu) / self.s
         if y > 0:
@@ -181,18 +85,18 @@ class LogisticProbabilityFunction(object):
         else:
             return -log(1 + exp(y))
 
-    def calc_1mlog_vector(self, vx):
-        return map(self.calc_1mlog, vx)
+    def calc_log1m_vector(self, vx):
+        return map(self.calc_log1m, vx)
 
-    def sum_1mlog_vector(self, vx):
+    def sum_log1m(self, vx):
         vy = 2 * (vx - self.mu) / self.s
         return (np.sum(-vy[vy > 0] - np.log(1 + np.exp(-vy[vy > 0]))) +
                 np.sum(-np.log(1 + np.exp(vy[vy <= 0]))))
 
-    def sum_1mlog_vector2(self, vx):
-        return sum(self.calc_1mlog_vector(vx))
+    def sum_log1m2(self, vx):
+        return sum(self.calc_log1m_vector(vx))
 
-    def hard_regularization(self):
+    def hard_reg(self):
         elo_norm = self.calc(200) - self.calc(-200)
         return 1000 * (elo_norm - 0.5)**2
 
@@ -203,7 +107,7 @@ class LogisticProbabilityFunction(object):
                 (sech(arg1)**2 * np.array([-1/self.s, -arg1/self.s]) -
                  sech(arg2)**2 * np.array([-1/self.s, -arg2/self.s])))
 
-    def soft_regularization(self):
+    def soft_reg(self):
         return self.mu*self.mu + self.s*self.s / 10000
 
     def soft_reg_grad(self):
@@ -212,7 +116,12 @@ class LogisticProbabilityFunction(object):
     def params_grad(self, x):
         d = sech((x - self.mu) / self.s) ** 2
         return d * np.array([-1 / (2 * self.s),
-                             (self.mu - x) / (2 * self.s * self.s)])
+                            (self.mu - x) / (2 * self.s * self.s)])
+
+    def params_grad_vector(self, x):
+        d = sech((x - self.mu) / self.s) ** 2
+        return np.array([-d / (2 * self.s),
+                         d * (self.mu - x) / (2 * self.s * self.s)])
 
 
 class Optimizer(object):
@@ -236,29 +145,44 @@ class Optimizer(object):
             games: list of tuples (player1, player2, date, result)
             Result is 0 for black victory, 1 for white victory, 2 for draw.
         """
-        self.games_ = results
-        # player -> date -> games list
-        self.player_date_games_ = self.generate_player_date_games_()
-        self.rating_vars_index_, index_by_player_date = self.generate_rating_vars_index_()
-        self.nvars_ = len(self.rating_vars_index_)
-        self.time_delta_vector_ = self.generate_rating_deltas_()
-        self.wins_rating_index_ = []
-        self.losses_rating_index_ = []
-        self.draws_rating_index_ = []
-        for player1, player2, date, result in self.games_:
-            indices = (index_by_player_date[(player1, date)],
-                       index_by_player_date[(player2, date)])
-            if result == 0:
-                self.losses_rating_index_.append(indices)
-            elif result == 1:
-                self.wins_rating_index_.append(indices)
-            else:
-                self.draws_rating_index_.append(indices)
-        self.wins_rating_index_ = np.array(self.wins_rating_index_)
-        self.losses_rating_index_ = np.array(self.losses_rating_index_)
-        self.draws_rating_index_ = np.array(self.draws_rating_index_)
+        # Sort games by result: losses, wins, draws.
+        self.games_ = list(sorted(results, key=lambda g: g[3]))
+        # Fill self.wins_slice_ and so on.
+        self.create_game_result_slices_(self.games_)
 
-        self.reg_mean_ = np.ones(self.nvars_, dtype=np.float64) * 2000.0
+        # player -> date -> games count
+        player_date_games_count = self.generate_player_date_games_()
+
+        self.var_player_date_, player_date_var = self.index_rating_vars_(
+            player_date_games_count)
+        self.nrating_vars_ = len(self.var_player_date_)
+
+        self.time_delta_vector_ = self.generate_time_delta_(
+            player_date_games_count)
+
+        self.games_player1_var_ = []
+        self.games_player2_var_ = []
+        for player1, player2, date, _ in self.games_:
+            self.games_player1_var_.append(player_date_var[(player1, date)])
+            self.games_player2_var_.append(player_date_var[(player2, date)])
+
+        self.games_player1_var_ = np.array(self.games_player1_var_)
+        self.games_player2_var_ = np.array(self.games_player2_var_)
+
+        self.reg_mean_ = np.ones(self.nrating_vars_, dtype=np.float64) * 2000.0
+
+    def create_game_result_slices_(self, games):
+        last_loss = -1
+        last_win = -1
+        for i in range(len(games)):
+            if games[i][3] == '0':
+                last_loss = i
+                last_win = i
+            elif games[i][3] == '1':
+                last_win = i
+        self.losses_slice_ = slice(0, last_loss + 1)
+        self.wins_slice_ = slice(last_loss + 1, last_win + 1)
+        self.draws_slice_ = slice(last_win + 1, len(self.games_))
 
     def generate_player_date_games_(self):
         player_date_games = {}
@@ -277,16 +201,16 @@ class Optimizer(object):
 
         return player_date_games
 
-    def generate_rating_vars_index_(self):
-        v = []
-        index_by_player_date = {}
-        for player in self.player_date_games_.keys():
-            for date in sorted(self.player_date_games_[player].keys()):
-                v.append((player, date))
-                index_by_player_date[(player, date)] = len(v) - 1
-        return v, index_by_player_date
+    def index_rating_vars_(self, player_date_games_count):
+        var_player_date = []
+        player_date_var = {}
+        for player, date_games_count in player_date_games_count.items():
+            for date in sorted(date_games_count.keys()):
+                player_date_var[(player, date)] = len(var_player_date)
+                var_player_date.append((player, date))
+        return var_player_date, player_date_var
 
-    def generate_rating_deltas_(self):
+    def generate_time_delta_(self, player_date_games):
         """Generate a table of coefficients to rating changes.
 
         1 / (difference in days for subsequent ratings) +
@@ -296,10 +220,10 @@ class Optimizer(object):
         """
 
         delta_vector = []
-        last_player, last_date = self.rating_vars_index_[0]
-        last_games = self.player_date_games_[last_player][last_date]
-        for player, date in self.rating_vars_index_[1:]:
-            games = self.player_date_games_[player][date]
+        last_player, last_date = self.var_player_date_[0]
+        last_games = player_date_games[last_player][last_date]
+        for player, date in self.var_player_date_[1:]:
+            games = player_date_games[player][date]
             if player == last_player:
                 delta_vector.append(1 / (date - last_date + games + last_games))
             else:
@@ -308,20 +232,18 @@ class Optimizer(object):
 
         return self.time_delta * np.array(delta_vector)
 
-    def calc_deltas_(self, v):
-        rating_delta = abs(v[1:self.nvars_] - v[0:self.nvars_ - 1])
-        time_games_change = np.inner(rating_delta,
-                                     self.time_delta_vector_)
-        return time_games_change
-
     def create_vars(self, ratings, fparam):
-        v = [0] * self.nvars_
+        v = [0] * self.nrating_vars_
         for player, r in ratings.items():
             for date, rating in r.items():
-                i = self.rating_vars_index_.index((player, date))
+                i = self.var_player_date_.index((player, date))
                 v[i] = rating
         v += fparam
         return np.array(v, dtype=np.float64)
+
+    def calc_smoothness_(self, rating_vars):
+        rating_delta = abs(rating_vars[1:] - rating_vars[:-1])
+        return np.inner(rating_delta, self.time_delta_vector_)
 
     def rating_delta_(self, v, index):
         if len(index):
@@ -332,84 +254,78 @@ class Optimizer(object):
     def objective(self, v, verbose=False):
         self.objective_calls += 1
 
-        self.f.reset_from_vars(v[self.nvars_:])
+        rating_vars = v[:self.nrating_vars_]
+        self.f.reset_from_vars(v[self.nrating_vars_:])
 
-        wins_rating_delta = self.rating_delta_(v, self.wins_rating_index_)
-        wins_likelihood = self.f.sum_log_vector(wins_rating_delta)
+        rating_diff = (rating_vars[self.games_player1_var_] -
+                       rating_vars[self.games_player2_var_])
 
-        losses_rating_delta = self.rating_delta_(v, self.losses_rating_index_)
-        losses_likelihood = self.f.sum_1mlog_vector(losses_rating_delta)
+        likelihood = (self.f.sum_log(rating_diff[self.wins_slice_]) +
+                      self.f.sum_log1m(rating_diff[self.losses_slice_]) +
+                      self.f.sum_log(rating_diff[self.draws_slice_]) / 2 +
+                      self.f.sum_log1m(rating_diff[self.draws_slice_]) / 2)
 
-        draws_rating_delta = self.rating_delta_(v, self.draws_rating_index_)
-        draws_likelihood = (self.f.sum_log_vector(draws_rating_delta) +
-                            self.f.sum_1mlog_vector(draws_rating_delta)) / 2
+        regularization = (np.linalg.norm(rating_vars - self.reg_mean_) ** 2 *
+                          self.rating_reg)
 
-        regularization = np.linalg.norm(v[:self.nvars_] - self.reg_mean_) ** 2
+        smoothness = self.calc_smoothness_(rating_vars)
 
-        time_games_change = self.calc_deltas_(v)
+        f_hard_reg = self.f.hard_reg() * len(self.games_) * self.func_hard_reg
+        f_soft_reg = self.f.soft_reg() * len(self.games_) * self.func_soft_reg
 
-        func_hard_reg = self.f.hard_regularization()
-        func_soft_reg = self.f.soft_regularization()
-
-        total = (wins_likelihood + losses_likelihood + draws_likelihood -
-            self.rating_reg * regularization -
-            time_games_change -
-            self.func_hard_reg * func_hard_reg * len(self.games_) -
-            self.func_soft_reg * func_soft_reg * len(self.games_))
+        total = (-likelihood + regularization + smoothness +
+                  f_hard_reg + f_soft_reg)
 
         if verbose:
-            return (-total, wins_likelihood, losses_likelihood,
-                    draws_likelihood, self.rating_reg * regularization,
-                    time_games_change, func_hard_reg, func_soft_reg)
+            return (total, likelihood, regularization, smoothness,
+                    f_hard_reg, f_soft_reg)
         else:
-            return -total
+            return total
 
     def gradient(self, v):
         self.gradient_calls += 1
-        self.f.reset_from_vars(v[self.nvars_:])
+        self.f.reset_from_vars(v[self.nrating_vars_:])
         g = np.zeros(len(v), dtype=np.float64)
 
-        for a, b in self.wins_rating_index_:
-            rating_diff = v[a] - v[b]
-            d = 1 / self.f.calc(rating_diff)
-            t = self.f.deriv(rating_diff) * d
-            g[a] += t
-            g[b] -= t
-            g[self.nvars_:] += self.f.params_grad(rating_diff) * d
+        rating_vars = v[:self.nrating_vars_]
+        self.f.reset_from_vars(v[self.nrating_vars_:])
 
-        for a, b in self.losses_rating_index_:
-            rating_diff = v[a] - v[b]
-            d = - 1 / (1 - self.f.calc(rating_diff))
-            t = self.f.deriv(rating_diff) * d
-            g[a] += t
-            g[b] -= t
-            g[self.nvars_:] += self.f.params_grad(rating_diff) * d
+        rating_diff = (rating_vars[self.games_player1_var_] -
+                       rating_vars[self.games_player2_var_])
 
-        for a, b in self.draws_rating_index_:
-            rating_diff = v[a] - v[b]
-            d = (1 / self.f.calc(rating_diff) -
-                 1 / (1 - self.f.calc(rating_diff))) / 2
-            t = self.f.deriv(rating_diff) * d
-            g[a] += t
-            g[b] -= t
-            g[self.nvars_:] += self.f.params_grad(rating_diff) * d
+        # d likelihood / d f(x)
+        d = np.zeros(len(rating_diff))
+        d[self.wins_slice_] = 1 / self.f.calc_vector(rating_diff[self.wins_slice_])
+        d[self.losses_slice_] = -1 / (1 - self.f.calc_vector(rating_diff[self.losses_slice_]))
+        d[self.draws_slice_] = (
+            1 / self.f.calc_vector(rating_diff[self.draws_slice_]) -
+            1 / (1 - self.f.calc_vector(rating_diff[self.draws_slice_])))
 
-        g[:self.nvars_] -= 2 * self.rating_reg * (v[:self.nvars_] - self.reg_mean_)
+        t = self.f.deriv(rating_diff) * d
 
-        vdelta_sign = np.sign(v[1:self.nvars_] - v[:self.nvars_ - 1])
-        g[:self.nvars_ - 1] += self.time_delta_vector_ * vdelta_sign
-        g[1:self.nvars_] -= self.time_delta_vector_ * vdelta_sign
+        for i in range(len(t)):
+            g[self.games_player1_var_[i]] += t[i]
+            g[self.games_player2_var_[i]] -= t[i]
 
-        g[self.nvars_:] -= (self.f.hard_reg_grad() * self.func_hard_reg *
+        g[self.nrating_vars_:] = np.dot(
+            d, np.transpose(self.f.params_grad_vector(rating_diff)))
+
+        g[:self.nrating_vars_] -= 2 * self.rating_reg * (rating_vars - self.reg_mean_)
+
+        vdelta_sign = np.sign(rating_vars[1:] - rating_vars[:-1])
+        g[:self.nrating_vars_ - 1] += self.time_delta_vector_ * vdelta_sign
+        g[1:self.nrating_vars_] -= self.time_delta_vector_ * vdelta_sign
+
+        g[self.nrating_vars_:] -= (self.f.hard_reg_grad() * self.func_hard_reg *
                             len(self.games_))
-        g[self.nvars_:] -= (self.f.soft_reg_grad() * self.func_soft_reg *
+        g[self.nrating_vars_:] -= (self.f.soft_reg_grad() * self.func_soft_reg *
                             len(self.games_))
 
         return -g
 
 
     def init(self):
-        return np.array([2000 + 1000*random() for i in range(self.nvars_)] +
+        return np.array([2000 + 1000*random() for i in range(self.nrating_vars_)] +
                            self.f.init())
 
     def ratings_from_point(self, point):
@@ -419,14 +335,16 @@ class Optimizer(object):
             {playerid: {date: rating}}
         """
         rating = {}
-        for i in range(self.nvars_):
-            player, date = self.rating_vars_index_[i]
+        for i in range(self.nrating_vars_):
+            player, date = self.var_player_date_[i]
             if player not in rating:
                 rating[player] = {}
             rating[player][date] = point[i]
         return rating
 
     def callback(self, xk):
+        if not self.disp:
+            return
         self.optimization_steps += 1
 
         if (time.time() - self.last_check > 10 or
@@ -457,11 +375,11 @@ class Optimizer(object):
                        jac=self.gradient,
                        callback=self.callback)
         ratings = self.ratings_from_point(res.x)
-        self.f.reset_from_vars(res.x[self.nvars_:])
+        self.f.reset_from_vars(res.x[self.nrating_vars_:])
         return ratings, self.f, res.x
 
     def random_solution(self):
         point = self.init()
         ratings = self.ratings_from_point(point)
-        self.f.reset_from_vars(point[self.nvars_:])
+        self.f.reset_from_vars(point[self.nrating_vars_:])
         return ratings, self.f

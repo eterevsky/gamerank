@@ -1,6 +1,6 @@
 import unittest
 
-from optimizer import Optimizer, WinningProbabilityFunction, LogisticProbabilityFunction
+from optimizer import Optimizer, LogisticProbabilityFunction
 
 GAMES1 = [(1, 2, 1, 1),
           (2, 3, 1, 1),
@@ -26,35 +26,6 @@ def derivative(f, x, dx=1E-6):
 
 class TestOptimizer(unittest.TestCase):
 
-    def test_probability_func(self):
-        f = WinningProbabilityFunction(nparameters=8)
-
-        f.reset_from_vars([1] * 8)
-        self.assertAlmostEqual(f.calc(-500), 0)
-        self.assertAlmostEqual(f.calc(-400), 0)
-        self.assertTrue(0 < f.calc(-350) < 0.125)
-        self.assertAlmostEqual(f.calc(-300), 0.125)
-        self.assertAlmostEqual(f.calc(0), 0.5)
-        self.assertTrue(0.5 < f.calc(50) < 0.625)
-        self.assertAlmostEqual(f.calc(100), 0.625)
-        self.assertAlmostEqual(f.calc(600), 1)
-
-        arr = f.calc_vector([-500, -400, 400])
-        self.assertEqual(len(arr), 3)
-        self.assertAlmostEqual(arr[0], 0)
-        self.assertAlmostEqual(arr[1], 0)
-        self.assertAlmostEqual(arr[2], 1)
-
-        self.assertGreater(f.hard_regularization(), 0)
-        self.assertAlmostEqual(f.soft_regularization(), 0)
-
-        f.reset_from_vars([0, 0.375, 0, 0, 0, 0.5, 0.125, 0])
-        self.assertAlmostEqual(f.calc(-300), 0)
-        self.assertAlmostEqual(f.calc(-200), 0.375)
-
-        self.assertAlmostEqual(f.hard_regularization(), 0)
-        self.assertGreater(f.soft_regularization(), 0)
-
     def test_func_deriv(self):
         f = LogisticProbabilityFunction()
         f.reset_from_vars([0.5, 100])
@@ -63,7 +34,7 @@ class TestOptimizer(unittest.TestCase):
         def freg(mu, s):
             save = [f.mu, f.s]
             f.reset_from_vars([mu, s])
-            res = f.hard_regularization(), f.soft_regularization()
+            res = f.hard_reg(), f.soft_reg()
             f.reset_from_vars(save)
             return res
 
@@ -94,7 +65,7 @@ class TestOptimizer(unittest.TestCase):
     def test_prepare_data(self):
         o = Optimizer()
         o.load_games(GAMES1)
-        self.assertEqual(o.nvars_, 9)
+        self.assertEqual(o.nrating_vars_, 9)
 
     def test_output_format(self):
         o = Optimizer()
@@ -113,24 +84,19 @@ class TestOptimizer(unittest.TestCase):
         o = Optimizer()
         o.load_games(GAMES2)
         v = o.create_vars({1: {1: 2200}, 2: {1: 1800}}, (0, 100))
-        (total1, wins_likelihood1, losses_likelihood1, draws_likelihood1,
-         regularization1, time_games_change1, func_hard_reg,
-         func_soft_reg) = o.objective(v, verbose=True)
-        self.assertLess(wins_likelihood1, 0)
-        self.assertAlmostEqual(losses_likelihood1, 0)
-        self.assertAlmostEqual(draws_likelihood1, 0)
+        (total1, likelihood1, regularization1, smoothness1,
+         func_hard_reg, func_soft_reg) = o.objective(v, verbose=True)
+        self.assertLess(likelihood1, 0)
         self.assertTrue(1E-6 < regularization1 < 1)
-        self.assertEqual(time_games_change1, 0)
+        self.assertEqual(smoothness1, 0)
         self.assertTrue(10 < func_hard_reg)
         self.assertTrue(0.01 < func_soft_reg < 10)
 
         v = o.create_vars({1: {1: 1800}, 2: {1: 2200}}, (0, 10))
-        (total2, wins_likelihood2, losses_likelihood2, draws_likelihood2,
-         regularization2, _, _, _) = o.objective(v, verbose=True)
+        (total2, likelihood2, regularization2, _, _, _) = o.objective(
+            v, verbose=True)
         self.assertAlmostEqual(regularization1, regularization2)
-        self.assertAlmostEqual(losses_likelihood2, 0)
-        self.assertAlmostEqual(draws_likelihood2, 0)
-        self.assertLess(wins_likelihood2, wins_likelihood1)
+        self.assertLess(likelihood2, likelihood1)
         self.assertGreater(total2, total1)
 
     def test_gradient(self):
@@ -174,18 +140,15 @@ class TestOptimizer(unittest.TestCase):
         o.load_games(GAMES3)
         v = o.create_vars({1: {1: 2200, 2: 1800}, 2: {1: 1800, 2: 2200}},
                           (0, 100))
-        (total1, wins_likelihood1, losses_likelihood1, draws_likelihood1,
-         regularization1, time_games_change1, _, _) = o.objective(
+        (total1, likelihood1, regularization1, smoothness1, _, _) = o.objective(
              v, verbose=True)
-        self.assertLess(wins_likelihood1, 0)
-        self.assertLess(losses_likelihood1, 0)
-        self.assertAlmostEqual(draws_likelihood1, 0)
+        self.assertLess(likelihood1, 0)
         self.assertTrue(1E-6 < regularization1 < 1)
 
     def test_time_regularization(self):
         o = Optimizer(rating_reg=1E-6, rand_seed=239, time_delta=0.0000239)
         o.load_games(GAMES3)
-        rating, f, v = o.run()
+        rating, f, v = o.run(method='bfgs')
 
         (total1, _, _, _, reg, time_games_change1, func_hard_reg,
          func_soft_reg) = o.objective(v, verbose=True)
@@ -239,7 +202,7 @@ class TestOptimizer(unittest.TestCase):
     def test_games1(self):
         o = Optimizer(rand_seed=239, time_delta=0.01)
         o.load_games(GAMES1)
-        rating, f, _ = o.run()
+        rating, f, _ = o.run(method='bfgs')
 
         self.assertGreater(rating[1][1], rating[2][1])
         self.assertGreater(rating[2][1], rating[3][1])
