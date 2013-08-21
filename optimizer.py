@@ -299,7 +299,7 @@ class Optimizer(object):
         d[self.losses_slice_] = -1 / (1 - self.f.calc_vector(rating_diff[self.losses_slice_]))
         d[self.draws_slice_] = (
             1 / self.f.calc_vector(rating_diff[self.draws_slice_]) -
-            1 / (1 - self.f.calc_vector(rating_diff[self.draws_slice_])))
+            1 / (1 - self.f.calc_vector(rating_diff[self.draws_slice_]))) / 2
 
         t = self.f.deriv(rating_diff) * d
 
