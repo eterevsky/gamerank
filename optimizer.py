@@ -125,7 +125,7 @@ class LogisticProbabilityFunction(object):
 
 
 class Optimizer(object):
-    def __init__(self, disp=False, func_hard_reg=100.0, func_soft_reg=0.01,
+    def __init__(self, disp=False, func_hard_reg=10.0, func_soft_reg=0.01,
                  time_delta=0.2, rating_reg=1E-4, rand_seed=None):
         seed(rand_seed)
         self.f = LogisticProbabilityFunction()
@@ -175,10 +175,10 @@ class Optimizer(object):
         last_loss = -1
         last_win = -1
         for i in range(len(games)):
-            if games[i][3] == '0':
+            if games[i][3] == 0:
                 last_loss = i
                 last_win = i
-            elif games[i][3] == '1':
+            elif games[i][3] == 1:
                 last_win = i
         self.losses_slice_ = slice(0, last_loss + 1)
         self.wins_slice_ = slice(last_loss + 1, last_win + 1)
@@ -369,10 +369,12 @@ class Optimizer(object):
         self.start_time = time.time()
         self.last_check = self.start_time
         self.last_step_check = 0
+        grad = (self.gradient if method.lower() in ('cg', 'newton-cg', 'bfgs')
+                else None)
         res = minimize(self.objective, init_point,
                        method=method,
                        options={'disp': self.disp},
-                       jac=self.gradient,
+                       jac=grad,
                        callback=self.callback)
         ratings = self.ratings_from_point(res.x)
         self.f.reset_from_vars(res.x[self.nrating_vars_:])
