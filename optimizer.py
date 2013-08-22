@@ -42,7 +42,7 @@ class LogisticProbabilityFunction(object):
         self.s = 1
 
     def init(self):
-        return [0, 400]
+        return [0, 1]
 
     def reset_from_vars(self, var):
         self.mu, self.s = var[0], var[1]
@@ -97,21 +97,21 @@ class LogisticProbabilityFunction(object):
         return sum(self.calc_log1m_vector(vx))
 
     def hard_reg(self):
-        elo_norm = self.calc(200) - self.calc(-200)
-        return 1000 * (elo_norm - 0.5)**2
+        elo_norm = self.calc(0.2) - self.calc(-0.2)
+        return (elo_norm - 0.5)**2
 
     def hard_reg_grad(self):
-        arg1 = (200 - self.mu) / self.s
-        arg2 = (-200 - self.mu) / self.s
-        return (500 * (tanh(arg1) - tanh(arg2) - 1) *
+        arg1 = (0.2 - self.mu) / self.s
+        arg2 = (-0.2 - self.mu) / self.s
+        return (0.5 * (tanh(arg1) - tanh(arg2) - 1) *
                 (sech(arg1)**2 * np.array([-1/self.s, -arg1/self.s]) -
                  sech(arg2)**2 * np.array([-1/self.s, -arg2/self.s])))
 
     def soft_reg(self):
-        return self.mu*self.mu + self.s*self.s / 10000
+        return self.mu*self.mu + self.s*self.s
 
     def soft_reg_grad(self):
-        return np.array([2 * self.mu, self.s / 5000 ])
+        return np.array([2*self.mu, 2*self.s])
 
     def params_grad(self, x):
         d = sech((x - self.mu) / self.s) ** 2
@@ -125,8 +125,8 @@ class LogisticProbabilityFunction(object):
 
 
 class Optimizer(object):
-    def __init__(self, disp=False, func_hard_reg=10.0, func_soft_reg=0.01,
-                 time_delta=0.2, rating_reg=1E-4, rand_seed=None):
+    def __init__(self, disp=False, func_hard_reg=10.0, func_soft_reg=1E-4,
+                 time_delta=0.2, rating_reg=1.0, rand_seed=None):
         seed(rand_seed)
         self.f = LogisticProbabilityFunction()
         self.disp = disp
@@ -168,8 +168,6 @@ class Optimizer(object):
 
         self.games_player1_var_ = np.array(self.games_player1_var_)
         self.games_player2_var_ = np.array(self.games_player2_var_)
-
-        self.reg_mean_ = np.ones(self.nrating_vars_, dtype=np.float64) * 2000.0
 
     def create_game_result_slices_(self, games):
         last_loss = -1
@@ -237,7 +235,7 @@ class Optimizer(object):
         for player, r in ratings.items():
             for date, rating in r.items():
                 i = self.var_player_date_.index((player, date))
-                v[i] = rating
+                v[i] = rating / 1000 - 1
         v += fparam
         return np.array(v, dtype=np.float64)
 
@@ -265,8 +263,7 @@ class Optimizer(object):
                       self.f.sum_log(rating_diff[self.draws_slice_]) / 2 +
                       self.f.sum_log1m(rating_diff[self.draws_slice_]) / 2)
 
-        regularization = (np.linalg.norm(rating_vars - self.reg_mean_) ** 2 *
-                          self.rating_reg)
+        regularization = np.linalg.norm(rating_vars) ** 2 * self.rating_reg
 
         smoothness = self.calc_smoothness_(rating_vars)
 
@@ -310,7 +307,7 @@ class Optimizer(object):
         g[self.nrating_vars_:] = np.dot(
             d, np.transpose(self.f.params_grad_vector(rating_diff)))
 
-        g[:self.nrating_vars_] -= 2 * self.rating_reg * (rating_vars - self.reg_mean_)
+        g[:self.nrating_vars_] -= 2 * self.rating_reg * rating_vars
 
         vdelta_sign = np.sign(rating_vars[1:] - rating_vars[:-1])
         g[:self.nrating_vars_ - 1] += self.time_delta_vector_ * vdelta_sign
@@ -325,7 +322,7 @@ class Optimizer(object):
 
 
     def init(self):
-        return np.array([2000 + 1000*random() for i in range(self.nrating_vars_)] +
+        return np.array([random() - 0.5 for i in range(self.nrating_vars_)] +
                            self.f.init())
 
     def ratings_from_point(self, point):
@@ -339,7 +336,7 @@ class Optimizer(object):
             player, date = self.var_player_date_[i]
             if player not in rating:
                 rating[player] = {}
-            rating[player][date] = point[i]
+            rating[player][date] = point[i] * 1000 + 2000
         return rating
 
     def callback(self, xk):
@@ -373,7 +370,7 @@ class Optimizer(object):
                 else None)
         res = minimize(self.objective, init_point,
                        method=method,
-                       options={'disp': self.disp},
+                       options={'disp': self.disp, 'gtol': 1E-8},
                        jac=grad,
                        callback=self.callback)
         ratings = self.ratings_from_point(res.x)
