@@ -28,8 +28,8 @@ optimizer.load_games(results)
 
     o_times = timeit.repeat(stmt='optimizer.objective(SAMPLE)', setup=setup, repeat=3, number=2000)
     print('Objective:', sorted(o / 2 for o in o_times)[1])
-    g_times = timeit.repeat(stmt='optimizer.gradient(SAMPLE)', setup=setup, repeat=3, number=20)
-    print('Gradient:', sorted(g / 20 * 1000 for g in g_times)[1])
+    g_times = timeit.repeat(stmt='optimizer.gradient(SAMPLE)', setup=setup, repeat=3, number=200)
+    print('Gradient:', sorted(g / 200 * 1000 for g in g_times)[1])
 
 
 if __name__ == '__main__':
