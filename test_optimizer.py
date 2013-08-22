@@ -112,9 +112,6 @@ class TestOptimizer(unittest.TestCase):
         v = o.create_vars({1: {1: 2200}, 2: {1: 1800}}, (0, 0.364))
         (total1, likelihood1, regularization1, smoothness1,
          func_hard_reg, func_soft_reg) = o.objective(v, verbose=True)
-        print()
-        print(total1, likelihood1, regularization1, smoothness1,
-         func_hard_reg, func_soft_reg)
         self.assertLess(likelihood1, 0)
         self.assertTrue(1E-6 < regularization1 < 1)
         self.assertEqual(smoothness1, 0)
@@ -165,7 +162,10 @@ class TestOptimizer(unittest.TestCase):
     def test_single_game(self):
         o = Optimizer(rand_seed=239)
         o.load_games([(1, 2, 1, 1)])
-        ratings, f, v = o.run(method='cg')
+        ratings, f, v = o.run()
+        print()
+        print(ratings)
+        print(o.objective(v, verbose=True))
         (total, likelihood, regularization, smoothness,
          func_hard_reg, func_soft_reg) = o.objective(v, verbose=True)
         self.assertTrue(100 < ratings[1][1] < 4000)
@@ -221,9 +221,6 @@ class TestOptimizer(unittest.TestCase):
         v1 = o.create_vars({1: {1: 2200}, 2: {1: 1800}}, [0, 0.364])
         v2 = o.create_vars({1: {1: 2000}, 2: {1: 2000}}, [0, 0.364])
         v3 = o.create_vars({1: {1: 1800}, 2: {1: 2200}}, [0, 0.364])
-
-        print(objective(v1, verbose=True))
-        print(objective(v2, verbose=True))
 
         self.assertLess(o.objective(v2) / o.objective(v1), 0.9)
         self.assertLess(o.objective(v2) / o.objective(v3), 0.9)
