@@ -33,19 +33,29 @@ except ImportError:
 
 
 def sech(x):
-    return 1 / np.cosh(x)
+    return 2 * np.exp(-abs(x)) / (1 + np.exp(-2*abs(x)))
+
+
+def convert_rating(x):
+    return x / 1000.0 - 1.0
+
+
+def convert_rating_diff(d):
+    return d / 1000.0
 
 
 class LogisticProbabilityFunction(object):
     def __init__(self):
         self.mu = 0
+        self.ls = 0
         self.s = 1
 
     def init(self):
-        return [0, 1]
+        return [0, -1.0]
 
     def reset_from_vars(self, var):
-        self.mu, self.s = var[0], var[1]
+        self.mu, self.ls = var[0], var[1]
+        self.s = exp(self.ls)
 
     def __str__(self):
         return "(1 + tanh((x - {}) / {})) / 2".format(self.mu, self.s)
@@ -104,29 +114,29 @@ class LogisticProbabilityFunction(object):
         arg1 = (0.2 - self.mu) / self.s
         arg2 = (-0.2 - self.mu) / self.s
         return (0.5 * (tanh(arg1) - tanh(arg2) - 1) *
-                (sech(arg1)**2 * np.array([-1/self.s, -arg1/self.s]) -
-                 sech(arg2)**2 * np.array([-1/self.s, -arg2/self.s])))
+                (sech(arg1)**2 * np.array([-1/self.s, -arg1]) -
+                 sech(arg2)**2 * np.array([-1/self.s, -arg2])))
 
     def soft_reg(self):
-        return self.mu*self.mu + self.s*self.s
+        return self.mu**2 + (self.ls + 1)**2
 
     def soft_reg_grad(self):
-        return np.array([2*self.mu, 2*self.s])
+        return np.array([2*self.mu, 2*(self.ls + 1)])
 
     def params_grad(self, x):
         d = sech((x - self.mu) / self.s) ** 2
         return d * np.array([-1 / (2 * self.s),
-                            (self.mu - x) / (2 * self.s * self.s)])
+                            (self.mu - x) / (2 * self.s)])
 
     def params_grad_vector(self, x):
         d = sech((x - self.mu) / self.s) ** 2
         return np.array([-d / (2 * self.s),
-                         d * (self.mu - x) / (2 * self.s * self.s)])
+                         d * (self.mu - x) / (2 * self.s)])
 
 
 class Optimizer(object):
-    def __init__(self, disp=False, func_hard_reg=10.0, func_soft_reg=1E-4,
-                 time_delta=0.2, rating_reg=1.0, rand_seed=None):
+    def __init__(self, disp=False, func_hard_reg=10.0, func_soft_reg=1E-5,
+                 time_delta=1000.0, rating_reg=10.0, rand_seed=None):
         seed(rand_seed)
         self.f = LogisticProbabilityFunction()
         self.disp = disp
@@ -240,7 +250,7 @@ class Optimizer(object):
         return np.array(v, dtype=np.float64)
 
     def calc_smoothness_(self, rating_vars):
-        rating_delta = abs(rating_vars[1:] - rating_vars[:-1])
+        rating_delta = (rating_vars[1:] - rating_vars[:-1])**2
         return np.inner(rating_delta, self.time_delta_vector_)
 
     def rating_delta_(self, v, index):
@@ -292,11 +302,15 @@ class Optimizer(object):
 
         # d likelihood / d f(x)
         d = np.zeros(len(rating_diff))
-        d[self.wins_slice_] = 1 / self.f.calc_vector(rating_diff[self.wins_slice_])
-        d[self.losses_slice_] = -1 / (1 - self.f.calc_vector(rating_diff[self.losses_slice_]))
-        d[self.draws_slice_] = (
-            1 / self.f.calc_vector(rating_diff[self.draws_slice_]) -
-            1 / (1 - self.f.calc_vector(rating_diff[self.draws_slice_]))) / 2
+
+        fdiffs = self.f.calc_vector(rating_diff)
+        fdiffs[fdiffs < 1E-10] = 1E-10
+        fdiffs[fdiffs > 1 - 1E-10] = 1 - 1E-10
+
+        d[self.wins_slice_] = 1 / fdiffs[self.wins_slice_]
+        d[self.losses_slice_] = -1 / (1 - fdiffs[self.losses_slice_])
+        d[self.draws_slice_] = 0.5 * (
+            1 / fdiffs[self.draws_slice_] - 1 / (1 - fdiffs[self.draws_slice_]))
 
         t = self.f.deriv(rating_diff) * d
 
@@ -310,8 +324,11 @@ class Optimizer(object):
         g[:self.nrating_vars_] -= 2 * self.rating_reg * rating_vars
 
         vdelta_sign = np.sign(rating_vars[1:] - rating_vars[:-1])
-        g[:self.nrating_vars_ - 1] += self.time_delta_vector_ * vdelta_sign
-        g[1:self.nrating_vars_] -= self.time_delta_vector_ * vdelta_sign
+
+        smoothness_grad = 2 * self.time_delta_vector_ * (rating_vars[1:] -
+                                                         rating_vars[:-1])
+        g[:self.nrating_vars_ - 1] += smoothness_grad
+        g[1:self.nrating_vars_] -= smoothness_grad
 
         g[self.nrating_vars_:] -= (self.f.hard_reg_grad() * self.func_hard_reg *
                             len(self.games_))
