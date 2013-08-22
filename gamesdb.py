@@ -84,7 +84,7 @@ class DataBase(object):
             players[row[0]] = row[1]
         return players
 
-    def load_game_results(self, mingames=1):
+    def load_game_results_mingames(self, mingames=1):
         cursor = self._conn.cursor()
 
         cursor.execute("""SELECT playerid
@@ -104,6 +104,20 @@ class DataBase(object):
                             AND playerid1 IN ({p})
                             AND playerid2 IN ({p})""".format(
                                 p=(', '.join(map(str, players)))))
+        results = []
+        for row in cursor:
+            results.append(tuple(row))
+        return results
+
+    def load_game_results(self, mingames=1):
+        if mingames > 1:
+            return self.load_game_results_mingames(mingames)
+
+        cursor = self._conn.cursor()
+
+        cursor.execute("""SELECT playerid1, playerid2, date / (24*3600), result
+                          FROM game
+                          WHERE dateprecision=0""")
         results = []
         for row in cursor:
             results.append(tuple(row))

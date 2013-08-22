@@ -1,6 +1,7 @@
 from math import cosh, exp, log, tanh
 import numpy as np
 from random import random, seed
+import sys
 import time
 
 try:
@@ -17,7 +18,7 @@ except ImportError:
       if method == 'nelder-mead':
           x = fmin(func=func, x0=x0, disp=disp, callback=callback)
       elif method == 'powell':
-          x =  fmin_powell(func=func, x0=x0, disp=disp, callback=callback)
+          x = fmin_powell(func=func, x0=x0, disp=disp, callback=callback)
       elif method == 'cg':
           x = fmin_cg(f=func, x0=x0, fprime=jac, disp=disp, callback=callback)
       elif method == 'bfgs':
@@ -58,7 +59,7 @@ class LogisticProbabilityFunction(object):
         self.s = exp(self.ls)
 
     def __str__(self):
-        return "(1 + tanh((x - {}) / {})) / 2".format(self.mu, self.s)
+        return "0.5 + 0.5 * tanh((x + {}) / {})".format(-self.mu, self.s)
 
     def calc(self, x):
         return 0.5 + 0.5 * tanh((x - self.mu) / self.s)
@@ -135,7 +136,7 @@ class LogisticProbabilityFunction(object):
 
 
 class Optimizer(object):
-    def __init__(self, disp=False, func_hard_reg=10.0, func_soft_reg=1E-5,
+    def __init__(self, disp=False, func_hard_reg=30.0, func_soft_reg=1E-5,
                  time_delta=1000.0, rating_reg=10.0, rand_seed=None):
         seed(rand_seed)
         self.f = LogisticProbabilityFunction()
@@ -370,6 +371,7 @@ class Optimizer(object):
                   'Gradient norm {}, calculated {} times.').format(
                       self.optimization_steps, o, self.objective_calls,
                       gn, self.gradient_calls))
+            sys.stdout.flush()
 
             self.last_step_check = self.optimization_steps
             self.last_check = time.time()
