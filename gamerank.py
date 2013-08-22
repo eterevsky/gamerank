@@ -1,16 +1,19 @@
+import cProfile
 import datetime
+import pstats
 
 from gamesdb import DataBase
 from optimizer import Optimizer
 
-def main():
+def main(profile=False):
     db = DataBase('games.db')
     results = db.load_game_results()
     print('{} games loaded.'.format(len(results)))
     players = db.load_players()
     optimizer = Optimizer(disp=True)
     optimizer.load_games(results)
-    ratings, f, v = optimizer.run(method='cg')
+    maxiter = 200 if profile else 0
+    ratings, f, v = optimizer.run(method='cg', maxiter=maxiter)
 
     print()
     print(optimizer.objective(v, verbose=True))
@@ -33,5 +36,10 @@ def main():
     print(list(sorted(by_rating))[-10:])
 
 
+def profiler():
+    cProfile.run('main(True)', 'opstats')
+    s = pstats.Stats('opstats')
+    s.print_callees('optimizer.py:')
+
 if __name__ == '__main__':
-    main()
+    profiler()

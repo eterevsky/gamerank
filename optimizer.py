@@ -13,18 +13,25 @@ except ImportError:
       method = method.lower()
 
       if 'disp' in options:
-          disp=options['disp']
+          disp = options['disp']
+      else:
+          disp = False
+
+      if 'maxiter' in options:
+          maxiter = options['maxiter']
+      else:
+          maxiter = None
 
       if method == 'nelder-mead':
-          x = fmin(func=func, x0=x0, disp=disp, callback=callback)
+          x = fmin(func=func, x0=x0, disp=disp, maxiter=maxiter, callback=callback)
       elif method == 'powell':
-          x = fmin_powell(func=func, x0=x0, disp=disp, callback=callback)
+          x = fmin_powell(func=func, x0=x0, disp=disp, maxiter=maxiter, callback=callback)
       elif method == 'cg':
-          x = fmin_cg(f=func, x0=x0, fprime=jac, disp=disp, callback=callback)
+          x = fmin_cg(f=func, x0=x0, fprime=jac, disp=disp, maxiter=maxiter, callback=callback)
       elif method == 'bfgs':
-          x = fmin_bfgs(f=func, x0=x0, fprime=jac, disp=disp, callback=callback)
+          x = fmin_bfgs(f=func, x0=x0, fprime=jac, disp=disp, maxiter=maxiter, callback=callback)
       elif method == 'newton-cg':
-          x = fmin_ncg(f=func, x0=x0, fprime=jac, disp=disp, callback=callback)
+          x = fmin_ncg(f=func, x0=x0, fprime=jac, disp=disp, maxiter=maxiter, callback=callback)
 
       class Result(object):
           def __init__(self, x):
@@ -290,17 +297,7 @@ class Optimizer(object):
         else:
             return total
 
-    def gradient(self, v):
-        self.gradient_calls += 1
-        self.f.reset_from_vars(v[self.nrating_vars_:])
-        g = np.zeros(len(v), dtype=np.float64)
-
-        rating_vars = v[:self.nrating_vars_]
-        self.f.reset_from_vars(v[self.nrating_vars_:])
-
-        rating_diff = (rating_vars[self.games_player1_var_] -
-                       rating_vars[self.games_player2_var_])
-
+    def likelihood_grad_(self, rating_diff):
         # d likelihood / d f(x)
         d = np.zeros(len(rating_diff))
 
@@ -313,11 +310,28 @@ class Optimizer(object):
         d[self.draws_slice_] = 0.5 * (
             1 / fdiffs[self.draws_slice_] - 1 / (1 - fdiffs[self.draws_slice_]))
 
+        return d
+
+    def grad_by_game_(self, rating_diff, d, l):
+        g = np.zeros(l, dtype=np.float64)
         t = self.f.deriv(rating_diff) * d
 
         for i in range(len(t)):
             g[self.games_player1_var_[i]] += t[i]
             g[self.games_player2_var_[i]] -= t[i]
+
+        return g
+
+    def gradient(self, v):
+        self.gradient_calls += 1
+        self.f.reset_from_vars(v[self.nrating_vars_:])
+
+        rating_vars = v[:self.nrating_vars_]
+        rating_diff = (rating_vars[self.games_player1_var_] -
+                       rating_vars[self.games_player2_var_])
+
+        d = self.likelihood_grad_(rating_diff)
+        g = self.grad_by_game_(rating_diff, d, len(v))
 
         g[self.nrating_vars_:] = np.dot(
             d, np.transpose(self.f.params_grad_vector(rating_diff)))
@@ -377,7 +391,7 @@ class Optimizer(object):
             self.last_check = time.time()
 
 
-    def run(self, method='cg'):
+    def run(self, method='cg', maxiter=0):
         init_point = self.init()
         self.objective_calls = 0
         self.gradient_calls = 0
@@ -387,9 +401,12 @@ class Optimizer(object):
         self.last_step_check = 0
         grad = (self.gradient if method.lower() in ('cg', 'newton-cg', 'bfgs')
                 else None)
+        options = {'disp': self.disp, 'gtol': 1E-8}
+        if maxiter:
+            options['maxiter'] = maxiter
         res = minimize(self.objective, init_point,
                        method=method,
-                       options={'disp': self.disp, 'gtol': 1E-8},
+                       options=options,
                        jac=grad,
                        callback=self.callback)
         ratings = self.ratings_from_point(res.x)
