@@ -1,8 +1,10 @@
 from math import cosh, exp, log, tanh
 import numpy as np
 from random import random, seed
+import scipy.sparse as sparse
 import sys
 import time
+
 
 try:
   from scipy.optimize import minimize
@@ -178,6 +180,9 @@ class Optimizer(object):
         self.time_delta_vector_ = self.generate_time_delta_(
             player_date_games_count)
 
+        self.grad_by_game_m_ = self.create_grad_by_game_(player_date_var)
+
+    def create_grad_by_game_(self, player_date_var):
         self.games_player1_var_ = []
         self.games_player2_var_ = []
         for player1, player2, date, _ in self.games_:
@@ -186,6 +191,17 @@ class Optimizer(object):
 
         self.games_player1_var_ = np.array(self.games_player1_var_)
         self.games_player2_var_ = np.array(self.games_player2_var_)
+
+        # m = sparse.lil_matrix(
+        #     (self.nrating_vars_, len(self.games_)), dtype=np.int8)
+        m = np.zeros((self.nrating_vars_, len(self.games_)), dtype=np.int8)
+
+        for i in range(len(self.games_)):
+            m[self.games_player1_var_[i], i] = 1
+            m[self.games_player2_var_[i], i] = 1
+
+        #return sparse.csc_matrix(m)
+        return m
 
     def create_game_result_slices_(self, games):
         last_loss = -1
@@ -316,9 +332,13 @@ class Optimizer(object):
         g = np.zeros(l, dtype=np.float64)
         t = self.f.deriv(rating_diff) * d
 
-        for i in range(len(t)):
-            g[self.games_player1_var_[i]] += t[i]
-            g[self.games_player2_var_[i]] -= t[i]
+        res = np.dot(self.grad_by_game_m_, t)
+        res = np.reshape(res, self.nrating_vars_)
+#        print(res)
+        g[:self.nrating_vars_] = res
+        # for i in range(len(t)):
+        #     g[self.games_player1_var_[i]] += t[i]
+        #     g[self.games_player2_var_[i]] -= t[i]
 
         return g
 
