@@ -421,7 +421,7 @@ class Optimizer(object):
         self.last_step_check = 0
         grad = (self.gradient if method.lower() in ('cg', 'newton-cg', 'bfgs')
                 else None)
-        options = {'disp': self.disp, 'gtol': 1E-8}
+        options = {'disp': self.disp}
         if maxiter:
             options['maxiter'] = maxiter
         res = minimize(self.objective, init_point,
