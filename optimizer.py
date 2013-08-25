@@ -1,4 +1,5 @@
 from math import cosh, exp, log, tanh
+import numexpr as ne
 import numpy as np
 from random import random, seed
 import scipy.sparse as sparse
@@ -42,8 +43,13 @@ except ImportError:
       return Result(x)
 
 
+ne.set_num_threads(6)
+
+
 def sech(x):
-    return 2 * np.exp(-abs(x)) / (1 + np.exp(-2*abs(x)))
+    return ne.evaluate("1 / cosh(x)")
+    ee = np.exp(-abs(x))
+    return 2 * ee / (1 + ee*ee)
 
 
 def convert_rating(x):
@@ -91,8 +97,13 @@ class LogisticProbabilityFunction(object):
 
     def sum_log(self, vx):
         vy = 2 * (vx - self.mu) / self.s
-        return (np.sum(-np.log(1 + np.exp(-vy[vy > 0]))) +
-                np.sum(vy[vy <= 0] - np.log(np.exp(vy[vy <= 0]) + 1)))
+
+        pos_idx = vy > 0
+        vpos = vy[pos_idx]
+        vneg = vy[~pos_idx]
+
+        return (np.sum(-np.log(1 + np.exp(-vpos))) +
+                np.sum(vneg - np.log(np.exp(vneg) + 1)))
 
     def sum_log2(self, vx):
         return sum(self.calc_log_vector(vx))
@@ -110,8 +121,12 @@ class LogisticProbabilityFunction(object):
 
     def sum_log1m(self, vx):
         vy = 2 * (vx - self.mu) / self.s
-        return (np.sum(-vy[vy > 0] - np.log(1 + np.exp(-vy[vy > 0]))) +
-                np.sum(-np.log(1 + np.exp(vy[vy <= 0]))))
+
+        vpos = -vy[vy > 0]
+        vneg = vy[vy <= 0]
+
+        return (np.sum(vpos - np.log(1 + np.exp(vpos))) +
+                np.sum(-np.log(1 + np.exp(vneg))))
 
     def sum_log1m2(self, vx):
         return sum(self.calc_log1m_vector(vx))
@@ -139,9 +154,13 @@ class LogisticProbabilityFunction(object):
                             (self.mu - x) / (2 * self.s)])
 
     def params_grad_vector(self, x):
-        d = sech((x - self.mu) / self.s) ** 2
-        return np.array([-d / (2 * self.s),
-                         d * (self.mu - x) / (2 * self.s)])
+        y = (x - self.mu) / self.s
+        d = sech(y) ** 2
+        a = np.array([[-1 / (2*self.s)], [-0.5]]) * np.ones(len(y))
+        a[1] *= y
+        return a * d
+        # return np.array([-d / (2 * self.s),
+        #                  d * (self.mu - x) / (2 * self.s)])
 
 
 class Optimizer(object):
@@ -192,16 +211,14 @@ class Optimizer(object):
         self.games_player1_var_ = np.array(self.games_player1_var_)
         self.games_player2_var_ = np.array(self.games_player2_var_)
 
-        # m = sparse.lil_matrix(
-        #     (self.nrating_vars_, len(self.games_)), dtype=np.int8)
-        m = np.zeros((self.nrating_vars_, len(self.games_)), dtype=np.int8)
+        m = sparse.lil_matrix(
+            (self.nrating_vars_, len(self.games_)), dtype=np.int8)
 
         for i in range(len(self.games_)):
             m[self.games_player1_var_[i], i] = 1
-            m[self.games_player2_var_[i], i] = 1
+            m[self.games_player2_var_[i], i] = -1
 
-        #return sparse.csc_matrix(m)
-        return m
+        return m.tocsr()
 
     def create_game_result_slices_(self, games):
         last_loss = -1
@@ -332,13 +349,9 @@ class Optimizer(object):
         g = np.zeros(l, dtype=np.float64)
         t = self.f.deriv(rating_diff) * d
 
-        res = np.dot(self.grad_by_game_m_, t)
+        res = self.grad_by_game_m_ * t
         res = np.reshape(res, self.nrating_vars_)
-#        print(res)
         g[:self.nrating_vars_] = res
-        # for i in range(len(t)):
-        #     g[self.games_player1_var_[i]] += t[i]
-        #     g[self.games_player2_var_[i]] -= t[i]
 
         return g
 
