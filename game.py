@@ -142,9 +142,13 @@ class PGNParser(object):
 
     def parse(self):
         while not self._eof():
-            tags = self._parse_tags()
-            moves = self._parse_moves()
-            yield Game.fromtags(tags, moves)
+            try:
+                tags = self._parse_tags()
+                moves = self._parse_moves()
+                game = Game.fromtags(tags, moves)
+            except Exception:
+                continue
+            yield game
 
     def parse_all(self):
         return list(self.parse())

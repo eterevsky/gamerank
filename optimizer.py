@@ -43,16 +43,17 @@ except ImportError:
       return Result(x)
 
 
-ne.set_num_threads(6)
+ne.set_num_threads(32)
 
 
 def sech(x):
-    return ne.evaluate("1 / cosh(x)")
-    # ee = np.exp(-abs(x))
-    # return 2 * ee / (1 + ee*ee)
+    ee = np.exp(-abs(x))
+    return 2 * ee / (1 + ee*ee)
 
 
 def sech2(x):
+    # ee = np.exp(-abs(x))
+    # return (2 * ee / (1 + ee*ee)) ** 2
     return ne.evaluate("1 / cosh(x)**2")
 
 
@@ -75,7 +76,10 @@ class LogisticProbabilityFunction(object):
 
     def reset_from_vars(self, var):
         self.mu, self.ls = var[0], var[1]
-        self.s = exp(self.ls)
+        if self.ls > 50:
+            self.s = 1E20
+        else:
+            self.s = exp(self.ls)
         if self.s < 1E-20:
             self.s = 1E-20
 
@@ -86,10 +90,16 @@ class LogisticProbabilityFunction(object):
         return 0.5 + 0.5 * tanh((x - self.mu) / self.s)
 
     def calc_vector(self, x):
-        return 0.5 + 0.5 * np.tanh((x - self.mu) / self.s)
+        mu = self.mu
+        s = self.s
+        return ne.evaluate('0.5 + 0.5 * tanh((x - mu) / s)')
+        # return 0.5 + 0.5 * np.tanh((x - self.mu) / self.s)
 
     def deriv(self, x):
-        return sech2((x - self.mu) / self.s) / (2 * self.s)
+        s = self.s
+        mu = self.mu
+        return ne.evaluate('0.5 / (s * cosh((x - mu) / s) ** 2)')
+        # return sech2((x - self.mu) / self.s) / (2 * self.s)
 
     def calc_log(self, x):
         y = 2 * (x - self.mu) / self.s
@@ -101,24 +111,23 @@ class LogisticProbabilityFunction(object):
     def calc_log_vector(self, vx):
         return map(self.calc_log, vx)
 
-    def sum_log(self, vx):
+    def sum_log_(self, vx):
         if len(vx) == 0:
             return 0
+
         mu = self.mu
         s = self.s
-
         vy = ne.evaluate('2 * (vx - mu) / s')
 
-        pos_idx = vy > 0
-        vpos = vy[pos_idx]
-        vneg = vy[~pos_idx]
+        vpos = vy[vy > 0]
+        vneg = vy[vy <= 0]
 
         t = ((-ne.evaluate('sum(log1p(exp(-vpos)))') if len(vpos) > 0 else 0)+
              (ne.evaluate('sum(vneg - log1p(exp(vneg)))') if len(vneg) > 0 else 0))
 
         return t
 
-    def sum_log_(self, vx):
+    def sum_log(self, vx):
         vy = 2 * (vx - self.mu) / self.s
 
         pos_idx = vy > 0
@@ -127,9 +136,6 @@ class LogisticProbabilityFunction(object):
 
         return (-np.sum(np.log(1 + np.exp(-vpos))) +
                 np.sum(vneg - np.log(np.exp(vneg) + 1)))
-
-    def sum_log2(self, vx):
-        return sum(self.calc_log_vector(vx))
 
     def calc_log1m(self, x):
         """Calculate log(1 - f(x))"""
@@ -150,9 +156,6 @@ class LogisticProbabilityFunction(object):
 
         return (np.sum(vpos - np.log(1 + np.exp(vpos))) +
                 np.sum(-np.log(1 + np.exp(vneg))))
-
-    def sum_log1m2(self, vx):
-        return sum(self.calc_log1m_vector(vx))
 
     def hard_reg(self):
         elo_norm = self.calc(0.2) - self.calc(-0.2)
@@ -187,8 +190,8 @@ class LogisticProbabilityFunction(object):
 
 
 class Optimizer(object):
-    def __init__(self, disp=False, func_hard_reg=30.0, func_soft_reg=1E-5,
-                 time_delta=1000.0, rating_reg=10.0, rand_seed=None):
+    def __init__(self, disp=False, func_hard_reg=50.0, func_soft_reg=1E-5,
+                 time_delta=300.0, rating_reg=10.0, rand_seed=None):
         seed(rand_seed)
         self.f = LogisticProbabilityFunction()
         self.disp = disp
@@ -297,7 +300,8 @@ class Optimizer(object):
         for player, date in self.var_player_date_[1:]:
             games = player_date_games[player][date]
             if player == last_player:
-                delta_vector.append(1 / (date - last_date + games + last_games))
+                #delta_vector.append(1 / (date - last_date + games + last_games))
+                delta_vector.append(1)
             else:
                 delta_vector.append(0)
             last_player, last_date, last_games = player, date, games
@@ -432,7 +436,8 @@ class Optimizer(object):
             return
         self.optimization_steps += 1
 
-        if (time.time() - self.last_check > 10 or
+        if (time.time() - self.last_check > 10 and
+            self.optimization_steps - self.last_step_check > 10 or
             self.optimization_steps - self.last_step_check > 1000):
             o = self.objective(xk)
             gn = np.linalg.norm(self.gradient(xk))

@@ -1,2 +1,4 @@
 http://www.bughouse-db.org/dl/
 http://www.ficsgames.org/
+
+http://icofy-blog.de/icofy-base/

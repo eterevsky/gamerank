@@ -7,14 +7,16 @@ from optimizer import Optimizer
 
 def main(profile=False):
     db = DataBase('games.db')
-    results = db.load_game_results()
+    results = db.load_game_results(mingames=50)
     print('{} games loaded.'.format(len(results)))
     players = db.load_players()
     optimizer = Optimizer(disp=True)
     optimizer.load_games(results)
-    maxiter = 5000 if profile else 0
+    maxiter = 30 if profile else 0
     ratings, f, v = optimizer.run(method='cg', maxiter=maxiter)
 
+    if profile:
+        return
     print()
 
     by_rating = []
@@ -41,4 +43,5 @@ def profiler():
     # s.print_callers()
 
 if __name__ == '__main__':
-    profiler()
+    # profiler()
+    main()

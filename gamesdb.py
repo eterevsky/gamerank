@@ -34,6 +34,8 @@ class DataBase(object):
 
     def __init__(self, path='games.db'):
         self._conn = sqlite3.connect(path)
+        self._conn.execute('PRAGMA cache_size=10000000')
+        self._conn.execute('PRAGMA synchronous=OFF')
         if self._unintialized():
             self.create_schema(path='games.sql')
 
@@ -84,44 +86,30 @@ class DataBase(object):
             players[row[0]] = row[1]
         return players
 
-    def load_game_results_mingames(self, mingames=1):
-        cursor = self._conn.cursor()
-
-        cursor.execute("""SELECT playerid
-                            FROM (SELECT player.playerid, count(*) AS c
-                                  FROM player, game
-                                  WHERE player.playerid=game.playerid1
-                                     OR player.playerid=game.playerid2
-                                  GROUP BY player.playerid)
-                           WHERE c > ?""",
-                       (mingames,))
-
-        players = list(x[0] for x in cursor)
-
-        cursor.execute("""SELECT playerid1, playerid2, date / (24*3600), result
-                          FROM game
-                          WHERE dateprecision=0
-                            AND playerid1 IN ({p})
-                            AND playerid2 IN ({p})""".format(
-                                p=(', '.join(map(str, players)))))
-        results = []
-        for row in cursor:
-            results.append(tuple(row))
-        return results
-
     def load_game_results(self, mingames=1):
-        if mingames > 1:
-            return self.load_game_results_mingames(mingames)
-
         cursor = self._conn.cursor()
 
         cursor.execute("""SELECT playerid1, playerid2, date / (24*3600), result
                           FROM game
-                          WHERE dateprecision=0""")
+                          WHERE dateprecision < 3""")
         results = []
+        player_games_count = {}
         for row in cursor:
-            results.append(tuple(row))
-        return results
+            player1, player2, date, result = row
+            results.append((player1, player2, date, result))
+            if player1 not in player_games_count:
+                player_games_count[player1] = 0
+            if player2 not in player_games_count:
+                player_games_count[player2] = 0
+            player_games_count[player1] += 1
+            player_games_count[player1] += 1
+
+        if mingames > 1:
+            return list(filter(lambda x: (player_games_count[x[0]] > mingames and
+                                          player_games_count[x[1]] > mingames),
+                               results))
+        else:
+            return results
 
     def find_game(self, game):
         moves = game.moves_str()
@@ -140,7 +128,9 @@ class DataBase(object):
                 lastname_from_name(row[4]) == game.player1_lastname() and
                 lastname_from_name(row[5]) == game.player2_lastname()):
                 return row[0]
-            elif len(game.moves) >= 19:
+            elif (len(game.moves) >= 19 and
+                _dates_compatible(game.date, game.date_precision,
+                                  row[2], row[3])):
                 raise DuplicateGameError(
                     'Two games with the same moves, but ' +
                     'different metadata:\n' +

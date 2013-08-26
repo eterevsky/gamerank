@@ -189,19 +189,6 @@ class TestOptimizer(unittest.TestCase):
         prob2 = f.calc(convert_rating_diff(rating[1][2] - rating[2][2]))
         self.assertLess(prob2, 0.49)
 
-        o.load_games([(1, 2, 1, 1), (2, 1, 1, 0),
-                      (1, 2, 100, 0), (2, 1, 100, 1)])
-        ratinga, f, v = o.run()
-        (total2, _, _, smoothness2, _, _) = o.objective(v, verbose=True)
-        self.assertGreater(abs(ratinga[1][100] - ratinga[1][1]),
-                           abs(rating[1][2] - rating[1][1]))
-        self.assertGreater(abs(ratinga[2][100] - ratinga[2][1]),
-                           abs(rating[2][2] - rating[2][1]))
-        self.assertGreater(
-            f.calc(convert_rating_diff(ratinga[1][1] - ratinga[2][1])), prob1)
-        self.assertLess(
-            f.calc(convert_rating_diff(ratinga[1][100] - ratinga[2][100])), prob2)
-
     def test_objective_symmetric_wins(self):
         o = Optimizer(rating_reg=0)
         o.load_games([(1, 2, 1, 1), (2, 1, 1, 1)])
