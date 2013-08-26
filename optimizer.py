@@ -48,8 +48,12 @@ ne.set_num_threads(6)
 
 def sech(x):
     return ne.evaluate("1 / cosh(x)")
-    ee = np.exp(-abs(x))
-    return 2 * ee / (1 + ee*ee)
+    # ee = np.exp(-abs(x))
+    # return 2 * ee / (1 + ee*ee)
+
+
+def sech2(x):
+    return ne.evaluate("1 / cosh(x)**2")
 
 
 def convert_rating(x):
@@ -72,6 +76,8 @@ class LogisticProbabilityFunction(object):
     def reset_from_vars(self, var):
         self.mu, self.ls = var[0], var[1]
         self.s = exp(self.ls)
+        if self.s < 1E-20:
+            self.s = 1E-20
 
     def __str__(self):
         return "0.5 + 0.5 * tanh((x + {}) / {})".format(-self.mu, self.s)
@@ -83,7 +89,7 @@ class LogisticProbabilityFunction(object):
         return 0.5 + 0.5 * np.tanh((x - self.mu) / self.s)
 
     def deriv(self, x):
-        return sech((x - self.mu) / self.s) ** 2 / (2 * self.s)
+        return sech2((x - self.mu) / self.s) / (2 * self.s)
 
     def calc_log(self, x):
         y = 2 * (x - self.mu) / self.s
@@ -96,13 +102,30 @@ class LogisticProbabilityFunction(object):
         return map(self.calc_log, vx)
 
     def sum_log(self, vx):
+        if len(vx) == 0:
+            return 0
+        mu = self.mu
+        s = self.s
+
+        vy = ne.evaluate('2 * (vx - mu) / s')
+
+        pos_idx = vy > 0
+        vpos = vy[pos_idx]
+        vneg = vy[~pos_idx]
+
+        t = ((-ne.evaluate('sum(log1p(exp(-vpos)))') if len(vpos) > 0 else 0)+
+             (ne.evaluate('sum(vneg - log1p(exp(vneg)))') if len(vneg) > 0 else 0))
+
+        return t
+
+    def sum_log_(self, vx):
         vy = 2 * (vx - self.mu) / self.s
 
         pos_idx = vy > 0
         vpos = vy[pos_idx]
         vneg = vy[~pos_idx]
 
-        return (np.sum(-np.log(1 + np.exp(-vpos))) +
+        return (-np.sum(np.log(1 + np.exp(-vpos))) +
                 np.sum(vneg - np.log(np.exp(vneg) + 1)))
 
     def sum_log2(self, vx):
@@ -139,8 +162,8 @@ class LogisticProbabilityFunction(object):
         arg1 = (0.2 - self.mu) / self.s
         arg2 = (-0.2 - self.mu) / self.s
         return (0.5 * (tanh(arg1) - tanh(arg2) - 1) *
-                (sech(arg1)**2 * np.array([-1/self.s, -arg1]) -
-                 sech(arg2)**2 * np.array([-1/self.s, -arg2])))
+                (sech2(arg1) * np.array([-1/self.s, -arg1]) -
+                 sech2(arg2) * np.array([-1/self.s, -arg2])))
 
     def soft_reg(self):
         return self.mu**2 + (self.ls + 1)**2
@@ -149,13 +172,13 @@ class LogisticProbabilityFunction(object):
         return np.array([2*self.mu, 2*(self.ls + 1)])
 
     def params_grad(self, x):
-        d = sech((x - self.mu) / self.s) ** 2
+        d = sech2((x - self.mu) / self.s)
         return d * np.array([-1 / (2 * self.s),
                             (self.mu - x) / (2 * self.s)])
 
     def params_grad_vector(self, x):
         y = (x - self.mu) / self.s
-        d = sech(y) ** 2
+        d = sech2(y)
         a = np.array([[-1 / (2*self.s)], [-0.5]]) * np.ones(len(y))
         a[1] *= y
         return a * d

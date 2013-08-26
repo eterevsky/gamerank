@@ -7,7 +7,7 @@ from optimizer import Optimizer
 
 def main(profile=False):
     db = DataBase('games.db')
-    results = db.load_game_results(mingames=100)
+    results = db.load_game_results()
     print('{} games loaded.'.format(len(results)))
     players = db.load_players()
     optimizer = Optimizer(disp=True)
