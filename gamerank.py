@@ -1,3 +1,4 @@
+import argparse
 import cProfile
 import datetime
 import pstats
@@ -5,8 +6,8 @@ import pstats
 from gamesdb import DataBase
 from optimizer import Optimizer
 
-def main(profile=False):
-    db = DataBase('games.db')
+def main(args, profile=False):
+    db = DataBase(args.games)
     results = db.load_game_results(mingames=50)
     print('{} games loaded.'.format(len(results)))
     players = db.load_players()
@@ -39,12 +40,23 @@ def main(profile=False):
         print('{:24} {}'.format(p, r))
 
 
-def profiler():
-    cProfile.run('main(True)')
+def profiler(args):
+    cProfile.runctx('main(args, profile=True)', {'args': args})
     # cProfile.run('main(True)', 'opstats')
     # s = pstats.Stats('opstats')
     # s.print_callers()
 
+def parse_command_line():
+    parser = argparse.ArgumentParser(description='Optimize ratings.')
+
+    parser.add_argument('-p', '--profile', action='store_true')
+    parser.add_argument('-g', '--games', default='games.db')
+
+    return parser.parse_args()
+
 if __name__ == '__main__':
-    # profiler()
-    main()
+    args = parse_command_line()
+    if args.profile:
+        profiler(args)
+    else:
+        main(args)
