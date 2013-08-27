@@ -1,4 +1,4 @@
-from math import cosh, exp, log, tanh
+from math import ceil, cosh, exp, log, tanh
 import numexpr as ne
 import numpy as np
 from random import random, seed
@@ -34,7 +34,9 @@ except ImportError:
       elif method == 'bfgs':
           x = fmin_bfgs(f=func, x0=x0, fprime=jac, disp=disp, maxiter=maxiter, callback=callback)
       elif method == 'l-bfgs-b':
-          x, _, _ = fmin_l_bfgs_b(func=func, x0=x0, fprime=jac, disp=(10 if disp else 0))
+          d = ceil(1000000 / len(x0))
+          print(d)
+          x, _, _ = fmin_l_bfgs_b(func=func, x0=x0, fprime=jac, disp=(d if disp else 0))
       elif method == 'newton-cg':
           x = fmin_ncg(f=func, x0=x0, fprime=jac, disp=disp, maxiter=maxiter, callback=callback)
 
@@ -193,7 +195,7 @@ class LogisticProbabilityFunction(object):
 
 class Optimizer(object):
     def __init__(self, disp=False, func_hard_reg=50.0, func_soft_reg=1E-5,
-                 time_delta=300.0, rating_reg=10.0, rand_seed=None):
+                 time_delta=100.0, rating_reg=10.0, rand_seed=None):
         seed(rand_seed)
         self.f = LogisticProbabilityFunction()
         self.disp = disp
