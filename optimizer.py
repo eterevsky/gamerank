@@ -10,7 +10,7 @@ import time
 try:
   from scipy.optimize import minimize
 except ImportError:
-  from scipy.optimize import fmin, fmin_powell, fmin_cg, fmin_bfgs, fmin_ncg
+  from scipy.optimize import fmin, fmin_powell, fmin_cg, fmin_bfgs, fmin_ncg, fmin_l_bfgs_b
 
   def minimize(func, x0, method='CG', options=None, jac=None, callback=None):
       method = method.lower()
@@ -33,6 +33,8 @@ except ImportError:
           x = fmin_cg(f=func, x0=x0, fprime=jac, disp=disp, maxiter=maxiter, callback=callback)
       elif method == 'bfgs':
           x = fmin_bfgs(f=func, x0=x0, fprime=jac, disp=disp, maxiter=maxiter, callback=callback)
+      elif method == 'l-bfgs-b':
+          x, _, _ = fmin_l_bfgs_b(func=func, x0=x0, fprime=jac, disp=(10 if disp else 0))
       elif method == 'newton-cg':
           x = fmin_ncg(f=func, x0=x0, fprime=jac, disp=disp, maxiter=maxiter, callback=callback)
 
@@ -452,7 +454,7 @@ class Optimizer(object):
             self.last_check = time.time()
 
 
-    def run(self, method='cg', maxiter=0):
+    def run(self, method='l-bfgs-b', maxiter=0):
         init_point = self.init()
         self.objective_calls = 0
         self.gradient_calls = 0
@@ -460,7 +462,7 @@ class Optimizer(object):
         self.start_time = time.time()
         self.last_check = self.start_time
         self.last_step_check = 0
-        grad = (self.gradient if method.lower() in ('cg', 'newton-cg', 'bfgs')
+        grad = (self.gradient if method.lower() in ('cg', 'newton-cg', 'bfgs', 'l-bfgs-b')
                 else None)
         options = {'disp': self.disp}
         if maxiter:
