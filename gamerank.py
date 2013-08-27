@@ -13,7 +13,7 @@ def main(profile=False):
     optimizer = Optimizer(disp=True)
     optimizer.load_games(results)
     maxiter = 30 if profile else 0
-    ratings, f, v = optimizer.run(method='cg', maxiter=maxiter)
+    ratings, f, v = optimizer.run(method='l-bfgs-b', maxiter=maxiter)
 
     if profile:
         return
@@ -33,7 +33,10 @@ def main(profile=False):
         print()
     print(f)
     print(f.calc(0.2) - f.calc(-0.2))
-    print(list(sorted(by_rating))[-10:])
+
+    best = list(sorted(by_rating))[-20:]
+    for r, p in reversed(best):
+        print('{:24} {}'.format(p, r))
 
 
 def profiler():
