@@ -1,5 +1,10 @@
 from math import ceil, cosh, exp, log, tanh
-import numexpr as ne
+
+try:
+    import numexpr as ne
+except ImportError:
+    ne = None
+
 import numpy as np
 from random import random, seed
 import scipy.sparse as sparse
@@ -46,8 +51,8 @@ except ImportError:
 
       return Result(x)
 
-
-ne.set_num_threads(32)
+if ne:
+    ne.set_num_threads(32)
 
 
 def sech(x):
@@ -55,10 +60,13 @@ def sech(x):
     return 2 * ee / (1 + ee*ee)
 
 
-def sech2(x):
-    # ee = np.exp(-abs(x))
-    # return (2 * ee / (1 + ee*ee)) ** 2
-    return ne.evaluate("1 / cosh(x)**2")
+if ne:
+    def sech2(x):
+        return ne.evaluate("1 / cosh(x)**2")
+else:
+    def sech2(x):
+        ee = np.exp(-abs(x))
+        return (2 * ee / (1 + ee*ee)) ** 2
 
 
 def convert_rating(x):
@@ -93,17 +101,22 @@ class LogisticProbabilityFunction(object):
     def calc(self, x):
         return 0.5 + 0.5 * tanh((x - self.mu) / self.s)
 
-    def calc_vector(self, x):
-        mu = self.mu
-        s = self.s
-        return ne.evaluate('0.5 + 0.5 * tanh((x - mu) / s)')
-        # return 0.5 + 0.5 * np.tanh((x - self.mu) / self.s)
+    if ne:
+        def calc_vector(self, x):
+            mu = self.mu
+            s = self.s
+            return ne.evaluate('0.5 + 0.5 * tanh((x - mu) / s)')
 
-    def deriv(self, x):
-        s = self.s
-        mu = self.mu
-        return ne.evaluate('0.5 / (s * cosh((x - mu) / s) ** 2)')
-        # return sech2((x - self.mu) / self.s) / (2 * self.s)
+        def deriv(self, x):
+            s = self.s
+            mu = self.mu
+            return ne.evaluate('0.5 / (s * cosh((x - mu) / s) ** 2)')
+    else:
+        def calc_vector(self, x):
+            return 0.5 + 0.5 * np.tanh((x - self.mu) / self.s)
+
+        def deriv(self, x):
+            return sech2((x - self.mu) / self.s) / (2 * self.s)
 
     def calc_log(self, x):
         y = 2 * (x - self.mu) / self.s
@@ -114,22 +127,6 @@ class LogisticProbabilityFunction(object):
 
     def calc_log_vector(self, vx):
         return map(self.calc_log, vx)
-
-    def sum_log_(self, vx):
-        if len(vx) == 0:
-            return 0
-
-        mu = self.mu
-        s = self.s
-        vy = ne.evaluate('2 * (vx - mu) / s')
-
-        vpos = vy[vy > 0]
-        vneg = vy[vy <= 0]
-
-        t = ((-ne.evaluate('sum(log1p(exp(-vpos)))') if len(vpos) > 0 else 0)+
-             (ne.evaluate('sum(vneg - log1p(exp(vneg)))') if len(vneg) > 0 else 0))
-
-        return t
 
     def sum_log(self, vx):
         vy = 2 * (vx - self.mu) / self.s
